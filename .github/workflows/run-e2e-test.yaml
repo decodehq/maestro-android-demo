@@ -115,7 +115,6 @@ jobs:
           fi
         shell: bash
 
-      # --- Whitelist root tests only (prevent subflows from being executed) ---
       - name: Build tests whitelist (root *.yml/*.yaml only)
         id: whitelist
         shell: bash
@@ -150,6 +149,52 @@ jobs:
           # 2) JSON array (useful for debugging or future API calls)
           printf -v JSON '%s' "$(printf '"%s",' "${ROOT_TESTS[@]}" | sed 's/,$//')"
           echo "tests_json=[${JSON}]" >> "$GITHUB_OUTPUT"
+
+      - name: Start BrowserStack Maestro build (Android)
+        id: start_build
+        env:
+          BS_USER: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          APP_URL: ${{ inputs.browserstack_app_id }}
+          SUITE_URL: ${{ steps.suite_url.outputs.value }}
+          DEVICES: ${{ env.BSTACK_DEVICES }}
+          PROJECT: ${{ env.BSTACK_PROJECT }}
+          BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
+          TESTS_JSON: ${{ steps.whitelist.outputs.tests_json }}
+        run: |
+          set -euo pipefail
+          # Build JSON payload; include explicit 'tests' list so subflows won't run.
+          PAYLOAD=$(jq -n \
+            --arg app     "$APP_URL" \
+            --arg suite   "$SUITE_URL" \
+            --arg project "$PROJECT" \
+            --arg build   "$BUILDNAME" \
+            --arg devices "$DEVICES" \
+            --argjson tests "${TESTS_JSON:-[]}" \
+            '{
+               app: $app,
+               testSuite: $suite,
+               project: $project,
+               buildName: $build,
+               devices: ($devices | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))),
+               tests: $tests
+             }')
+
+          echo "Request payload:"
+          echo "$PAYLOAD" | jq -C .
+
+          RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
+            -H "Content-Type: application/json" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
+            -d "$PAYLOAD")
+
+          echo "Response:"
+          echo "$RESP" | jq -C .
+
+          BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
+          test "$BUILD_ID" != "null" -a -n "$BUILD_ID"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+        shell: bash
 
       - name: Wait for build to finish
         id: wait_build
