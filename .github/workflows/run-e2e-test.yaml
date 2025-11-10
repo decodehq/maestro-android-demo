@@ -248,11 +248,23 @@ jobs:
           path: .
 
       - name: Publish Allure HTML to Pages branch (non-overwrite)
+        id: publish_pages
         uses: ./.github/actions/publish-allure-to-pages
         with:
           results_zip: allure-results-${{ needs.maestro-e2e.outputs.build_id }}.zip
           build_id: ${{ needs.maestro-e2e.outputs.build_id }}
           pages_branch: allure-report
           base_path: reports
-          site_title: "Allure Reports"
           folder_prefix: "run-"
+
+      # 1) Annotation with a clickable link (shows in the job log)
+      - name: Add annotation with Allure link
+        run: |
+          echo "::notice title=Allure Report::${{ steps.publish_pages.outputs.report_url }}"
+          echo "[Allure Report](${{ steps.publish_pages.outputs.report_url }})" >> "$GITHUB_STEP_SUMMARY"
+
+      # 2) Save as environment variable for later steps in this job
+      - name: Export ALLURE_REPORT_URL
+        run: |
+          echo "ALLURE_REPORT_URL=${{ steps.publish_pages.outputs.report_url }}" >> "$GITHUB_ENV"
+          echo "Allure link: $ALLURE_REPORT_URL"
