@@ -1,0 +1,164 @@
+name: Maestro E2E on BrowserStack
+
+on:
+  workflow_dispatch:
+    inputs:
+      browserstack_app_id:
+        description: "BrowserStack App ID (bs://...)"
+        type: string
+        required: true
+      browserstack_suite_id:
+        description: "BrowserStack Maestro Suite ID (bs://...), leave empty to zip & upload"
+        type: string
+        required: false
+        default: ""
+      generate_allure:
+        description: "Generate Allure report"
+        type: boolean
+        required: false
+        default: true
+      send_slack:
+        description: "Send Slack notification"
+        type: boolean
+        required: false
+        default: true
+
+env:
+  BSTACK_DEVICES: "Google Pixel 7-13.0"
+  # Optional project / build naming
+  BSTACK_PROJECT: "Maestro E2E"
+  BSTACK_BUILD_NAME: "E2E Run - ${{ github.ref_name }} @ ${{ github.run_number }}"
+
+jobs:
+  maestro-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify BrowserStack secrets
+        run: |
+          test -n "${{ secrets.BROWSERSTACK_USERNAME }}" || { echo "Missing secret: BROWSERSTACK_USERNAME"; exit 1; }
+          test -n "${{ secrets.BROWSERSTACK_ACCESS_KEY }}" || { echo "Missing secret: BROWSERSTACK_ACCESS_KEY"; exit 1; }
+        shell: bash
+
+      - name: Prepare suite zip when suite ID is not provided
+        id: zip_suite
+        if: ${{ inputs.browserstack_suite_id == '' }}
+        run: |
+          set -euo pipefail
+          ZIP_NAME="maestro_flows.zip"
+          rm -f "$ZIP_NAME"
+
+          # Create a zip of the current directory excluding:
+          # - .github/**, .maestro/**, LICENSE/LICENCE, README.md
+          # Notes:
+          #   - Both single and double-star patterns are included for portability.
+          #   - Files will be at the root of the archive (no wrapper folder needed).
+          zip -qr "$ZIP_NAME" . \
+            -x ".github/*" ".github/**" \
+               ".maestro/*" ".maestro/**" \
+               "LICENSE" "LICENCE" "README.md"
+
+          echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Upload suite zip to BrowserStack (if needed)
+        id: upload_suite
+        if: ${{ inputs.browserstack_suite_id == '' }}
+        env:
+          BS_USER: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" \
+            -F "file=@${{ steps.zip_suite.outputs.zip_path }}" \
+            -F "custom_id=${{ github.repository }}-${{ github.run_id }}")
+          echo "$RESP"
+          SUITE_URL=$(echo "$RESP" | jq -r '.test_suite_url')
+          SUITE_ID=$(echo "$RESP" | jq -r '.test_suite_id')
+          test "$SUITE_URL" != "null"
+          echo "suite_url=$SUITE_URL" >> "$GITHUB_OUTPUT"
+          echo "suite_id=$SUITE_ID"   >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Resolve suite URL
+        id: suite_url
+        run: |
+          if [ -n "${{ inputs.browserstack_suite_id }}" ]; then
+            echo "value=${{ inputs.browserstack_suite_id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ steps.upload_suite.outputs.suite_url }}" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
+      - name: Start BrowserStack Maestro build (Android)
+        id: start_build
+        env:
+          BS_USER: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          APP_URL: ${{ inputs.browserstack_app_id }}
+          SUITE_URL: ${{ steps.suite_url.outputs.value }}
+          DEVICES: ${{ env.BSTACK_DEVICES }}
+          PROJECT: ${{ env.BSTACK_PROJECT }}
+          BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
+        run: |
+          set -euo pipefail
+          # Build the JSON payload (devices is an array)
+          IFS=',' read -r -a DEV_ARR <<< "$DEVICES"
+          DEV_JSON=$(printf '"%s",' "${DEV_ARR[@]}" | sed 's/,$//')
+
+          PAYLOAD=$(jq -n \
+            --arg app "$APP_URL" \
+            --arg suite "$SUITE_URL" \
+            --arg project "$PROJECT" \
+            --arg build "$BUILDNAME" \
+            --argjson devices "[$DEV_JSON]" \
+            '{app: $app, testSuite: $suite, project: $project, buildName: $build, devices: $devices }')
+
+          echo "Request:"
+          echo "$PAYLOAD" | jq -C .
+
+          RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
+            -H "Content-Type: application/json" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
+            -d "$PAYLOAD")
+
+          echo "Response:"
+          echo "$RESP" | jq -C .
+
+          BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
+          test "$BUILD_ID" != "null"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - name: Wait for build to finish
+        id: wait_build
+        env:
+          BS_USER: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          BUILD_ID: ${{ steps.start_build.outputs.build_id }}
+        run: |
+          set -euo pipefail
+          ATTEMPTS=720   # up to ~2 hours (every 10s)
+          SLEEP=10
+          STATUS="running"
+          mkdir -p artifacts
+          for i in $(seq 1 $ATTEMPTS); do
+            RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
+              -X GET "https://api-cloud.browserstack.com/app-automate/maestro/v2/builds/$BUILD_ID")
+            STATUS=$(echo "$RESP" | jq -r '.status')
+            echo "[$(date -u +%H:%M:%S)] Build $BUILD_ID status: $STATUS"
+            echo "$RESP" > "artifacts/build-$BUILD_ID.json"
+
+            if [ "$STATUS" = "passed" ] || [ "$STATUS" = "failed" ] || [ "$STATUS" = "error" ] || [ "$STATUS" = "stopped" ] || [ "$STATUS" = "timedout" ]; then
+              break
+            fi
+            sleep $SLEEP
+          done
+
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+        shell: bash

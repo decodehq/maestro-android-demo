@@ -1,0 +1,28 @@
+appId: org.wikipedia.alpha
+---
+- launchApp:
+    clearState: true
+
+- tapOn: Continue
+
+- assertVisible: New ways to explore
+- tapOn: Continue
+
+- assertVisible: Reading lists with sync
+- assertVisible:
+    id: imageViewCentered
+- tapOn: Continue
+
+- assertVisible:
+    id: imageViewCentered
+- assertVisible: Data & Privacy
+- tapOn: Get started
+
+- assertVisible:
+    id: main_toolbar_wordmark
+- assertVisible:
+    text: Search Wikipedia
+    index: 1
+
+
+

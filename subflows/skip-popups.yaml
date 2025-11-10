@@ -1,0 +1,13 @@
+appId: org.wikipedia.alpha
+---
+- runFlow:
+    when:
+      visible: "Play today's game"
+    commands:
+      - tapOn: "Close"
+
+- runFlow:
+    when:
+      visible: "Customize your toolbar"
+    commands:
+      - tapOn: "Got it"

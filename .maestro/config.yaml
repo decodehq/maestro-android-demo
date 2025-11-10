@@ -1,0 +1,7 @@
+# .maestro/config.yaml
+flows:
+  - "flows/preconditions/*"
+  - "flows/search-for-article.yaml"
+
+includeTags:
+  - smoke
