@@ -1,121 +1,122 @@
-name: Publish Allure to Pages (non-overwrite)
-description: Builds Allure HTML from results and publishes to a Pages branch under a unique subfolder, preserving history.
-author: you
-
+name: "Publish Allure to Pages (non-overwrite)"
+description: "Builds Allure HTML from results and publishes to a Pages branch under a unique subfolder, preserving history."
+author: "you"
+runs:
+  using: "composite"
 inputs:
   results_zip:
-    description: Path to zipped allure-results created earlier
+    description: "Path to zipped allure-results created earlier"
     required: true
   build_id:
-    description: Build ID used as folder name
+    description: "Build ID used as folder name"
     required: true
   pages_branch:
-    description: Branch that GitHub Pages serves from
+    description: "Branch that GitHub Pages serves from (Settings → Pages)"
     required: false
-    default: allure-report
+    default: "allure-report"
   base_path:
-    description: Base folder on the Pages branch to store reports
+    description: "Base folder on the Pages branch to store reports"
     required: false
-    default: reports
+    default: "reports"
   site_title:
-    description: Title for index.html
+    description: "Title for index.html"
     required: false
-    default: Allure Reports
+    default: "Allure Reports"
   folder_prefix:
-    description: Optional prefix for the folder (e.g., run-). Final path: base_path/<prefix><build_id>/
+    description: "Optional prefix for the folder (e.g., run-). Final path: base_path/<prefix><build_id>/"
     required: false
     default: ""
 
-runs:
-  using: composite
-  steps:
-    - name: Set up Node (for Allure CLI via npm)
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
+steps:
+  - name: Set up Java for Allure
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: "17"
 
-    - name: Install Allure CLI (npm)
-      shell: bash
-      run: |
-        set -euo pipefail
-        npm i -g allure-commandline
-        echo "$(npm root -g)/allure-commandline/bin" >> "$GITHUB_PATH"
-        echo "Allure version: $(allure --version)"
+  - name: Install Allure CLI (latest)
+    shell: bash
+    run: |
+      set -euo pipefail
+      ver=$(curl -s https://api.github.com/repos/allure-framework/allure2/releases/latest | jq -r .tag_name | sed 's/^v//')
+      curl -sL "https://github.com/allure-framework/allure2/releases/download/v${ver}/allure-${ver}.zip" -o /tmp/allure.zip
+      sudo unzip -q /tmp/allure.zip -d /opt
+      echo "/opt/allure-${ver}/bin" >> $GITHUB_PATH
 
-    - name: Unzip allure-results
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir -p ./_work/allure-results
-        unzip -q "${{ inputs.results_zip }}" -d ./_work/allure-results
-        echo "Unzipped to _work/allure-results"
-        ls -la ./_work/allure-results || true
+  - name: Unzip allure-results
+    shell: bash
+    run: |
+      set -euo pipefail
+      mkdir -p ./_work/allure-results
+      unzip -q "${{ inputs.results_zip }}" -d ./_work/allure-results
 
-    - name: Generate Allure HTML
-      shell: bash
-      run: |
-        set -euo pipefail
-        allure generate ./_work/allure-results -o ./_work/allure-report --clean
-        test -f ./_work/allure-report/index.html
+  - name: Generate Allure HTML
+    shell: bash
+    run: |
+      set -euo pipefail
+      allure generate ./_work/allure-results -o ./_work/allure-report --clean
+      test -f ./_work/allure-report/index.html
 
-    - name: Publish to Pages branch (preserve history)
-      shell: bash
-      env:
-        BRANCH: ${{ inputs.pages_branch }}
-        BASE:   ${{ inputs.base_path }}
-        BID:    ${{ inputs.build_id }}
-        PREFIX: ${{ inputs.folder_prefix }}
-        TITLE:  ${{ inputs.site_title }}
-      run: |
-        set -euo pipefail
-        git config user.name  "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  - name: Publish to Pages branch (preserve history)
+    shell: bash
+    env:
+      BRANCH: ${{ inputs.pages_branch }}
+      BASE:   ${{ inputs.base_path }}
+      BID:    ${{ inputs.build_id }}
+      PREFIX: ${{ inputs.folder_prefix }}
+      TITLE:  ${{ inputs.site_title }}
+    run: |
+      set -euo pipefail
+      git config user.name  "github-actions[bot]"
+      git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-          git fetch origin "$BRANCH":"$BRANCH"
-          git checkout "$BRANCH"
-        else
-          git checkout --orphan "$BRANCH"
-          rm -rf ./*
-        fi
+      # Fetch or create the Pages branch
+      if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+        git fetch origin "$BRANCH":"$BRANCH"
+        git checkout "$BRANCH"
+      else
+        git checkout --orphan "$BRANCH"
+        rm -rf *
+      fi
 
-        mkdir -p "$BASE"
-        DEST="$BASE/${PREFIX}${BID}"
-        mkdir -p "$DEST"
-        rsync -a --delete ./_work/allure-report/ "$DEST/"
+      mkdir -p "$BASE"
+      DEST="$BASE/${PREFIX}${BID}"
+      mkdir -p "$DEST"
+      rsync -a --delete ./_work/allure-report/ "$DEST/"
 
-        tmpindex="$(mktemp)"
-        cat > "$tmpindex" <<'HTML'
-          <!doctype html>
-          <meta charset="utf-8">
-          <title>__TITLE__</title>
-          <style>
-            body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.5;background:#0b0b0c;color:#e6e6e6}
-            a{color:#79c0ff;text-decoration:none}
-            h1{font-weight:600;margin:0 0 16px}
-            ul{list-style:none;padding:0}
-            li{margin:8px 0}
-            .path{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
-          </style>
-          <h1>__TITLE__</h1>
-          <ul>
-          HTML
+      # Build/update a simple index.html listing all runs (newest first)
+      tmpindex=$(mktemp)
+      cat > "$tmpindex" <<'HTML'
+      <!doctype html>
+      <meta charset="utf-8">
+      <title>__TITLE__</title>
+      <style>
+        body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.5;background:#0b0b0c;color:#e6e6e6}
+        a{color:#79c0ff;text-decoration:none}
+        h1{font-weight:600;margin:0 0 16px}
+        ul{list-style:none;padding:0}
+        li{margin:8px 0}
+        .path{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
+      </style>
+      <h1>__TITLE__</h1>
+      <ul>
+      HTML
 
-        if [ -d "$BASE" ]; then
-          # List newest first
-          for d in $(ls -1 "$BASE"); do
-            echo "$BASE/$d"
-          done | sort -r | while read -r p; do
-            rel="${p#"$BASE/"}"
-            echo "<li>🗂 <a class=\"path\" href=\"./$BASE/$rel/\">$rel</a></li>" >> "$tmpindex"
-          done
-        fi
+      # List folders under $BASE/, newest first by commit time (fallback alphabetical)
+      if ls -1 "$BASE" >/dev/null 2>&1; then
+        for d in $(ls -1 "$BASE"); do
+          echo "$BASE/$d"
+        done | sort -r | while read p; do
+          rel="${p#"$BASE/"}"
+          echo "<li>🗂 <a class=\"path\" href=\"./$BASE/$rel/\">$rel</a></li>" >> "$tmpindex"
+        done
+      fi
 
-        echo "</ul>" >> "$tmpindex"
-        # Replace title placeholder
-        sed -i.bak "s/__TITLE__/${TITLE//\//\\/}/g" "$tmpindex"
-        mv "$tmpindex" index.html
+      echo "</ul>" >> "$tmpindex"
+      sed -i.bak "s/__TITLE__/$TITLE/g" "$tmpindex"
+      mv "$tmpindex" index.html
 
-        git add -A
-        git commit -m "Publish Allure report for build ${BID} at ${DEST}" || echo "No changes to commit."
-        git push origin "$BRANCH"
+      # Commit + push
+      git add -A
+      git commit -m "Publish Allure report for build ${BID} at ${DEST}" || echo "No changes to commit."
+      git push origin "$BRANCH"
