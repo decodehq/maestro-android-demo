@@ -43,11 +43,7 @@ jobs:
           test -n "${{ secrets.BROWSERSTACK_ACCESS_KEY }}" || { echo "Missing secret: BROWSERSTACK_ACCESS_KEY"; exit 1; }
         shell: bash
 
-      # ────────────────────────────────────────────────────────────────────────────
-      # ZIP ONLY ALLOWED FILE TYPES when suite ID is not provided
-      # Allowed by BrowserStack: .yaml .yml .js .png .jpeg .jpg .gif .mp4
-      # Also exclude: .github/** .maestro/** LICENSE/LICENCE README.md
-      # ────────────────────────────────────────────────────────────────────────────
+      # --- Zip only allowed types, exclude meta folders ---
       - name: Prepare suite zip when suite ID is not provided
         id: zip_suite
         if: ${{ inputs.browserstack_suite_id == '' }}
@@ -59,23 +55,16 @@ jobs:
           TMP_DIR="$(mktemp -d)"
           rsync -a --prune-empty-dirs \
             --include='*/' \
-            --include='*.yaml' \
-            --include='*.yml' \
+            --include='*.yaml' --include='*.yml' \
             --include='*.js' \
-            --include='*.png' \
-            --include='*.jpg' \
-            --include='*.jpeg' \
-            --include='*.gif' \
+            --include='*.png' --include='*.jpg' --include='*.jpeg' --include='*.gif' \
             --include='*.mp4' \
             --exclude='.github/***' \
             --exclude='.maestro/***' \
-            --exclude='LICENSE' \
-            --exclude='LICENCE' \
-            --exclude='README.md' \
+            --exclude='LICENSE' --exclude='LICENCE' --exclude='README.md' \
             --exclude='*' \
             ./ "$TMP_DIR/"
 
-          # Debug: list what will be zipped
           echo "== Suite contents =="
           (cd "$TMP_DIR" && find . -type f | sort)
 
@@ -83,7 +72,6 @@ jobs:
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      # 📦 Upload the produced suite ZIP as a workflow artifact (so you can inspect it)
       - name: Upload suite ZIP artifact
         if: ${{ inputs.browserstack_suite_id == '' }}
         uses: actions/upload-artifact@v4
@@ -101,7 +89,6 @@ jobs:
           BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
         run: |
           set -euo pipefail
-          # Sanitize custom_id: only [A-Za-z0-9._-] allowed
           RAW_ID="${{ github.repository }}-${{ github.ref_name }}-${{ github.run_id }}"
           CUSTOM_ID="$(echo "$RAW_ID" | tr '[:space:]' '_' | sed 's/[^A-Za-z0-9._-]/_/g')"
 
@@ -128,21 +115,18 @@ jobs:
           fi
         shell: bash
 
-      # ✅ Whitelist only top-level tests (depth=1) so subflows aren't executed
+      # --- Whitelist root tests only (prevent subflows from being executed) ---
       - name: Build tests whitelist (root *.yml/*.yaml only)
         id: whitelist
         shell: bash
         run: |
           set -euo pipefail
-          # Pick only root-level *.yml/*.yaml (exclude folders like subflows/)
           mapfile -t ROOT_TESTS < <(find . -maxdepth 1 -type f \( -iname "*.yml" -o -iname "*.yaml" \) -printf "%f\n" | sort)
 
           echo "Selected tests:"
-          for f in "${ROOT_TESTS[@]:-}"; do
-            echo " - $f"
-          done
+          printf ' - %s\n' "${ROOT_TESTS[@]:-}"
 
-          # Expose as newline-delimited output (safe for GitHub Actions)
+          # Multiline output (human friendly)
           {
             echo 'tests<<EOF'
             for f in "${ROOT_TESTS[@]:-}"; do
@@ -151,9 +135,13 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-          # Optional: also provide a JSON array, if you need it later
-          JSON=$(printf '"%s",' "${ROOT_TESTS[@]:-}" | sed 's/,$//')
-          echo "tests_json=[$JSON]" >> "$GITHUB_OUTPUT"
+          # Machine output: JSON array to pass to the API
+          if [ "${#ROOT_TESTS[@]:-0}" -gt 0 ]; then
+            JSON=$(printf '"%s",' "${ROOT_TESTS[@]}" | sed 's/,$//')
+            echo "tests_json=[$JSON]" >> "$GITHUB_OUTPUT"
+          else
+            echo "tests_json=[]" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Start BrowserStack Maestro build (Android)
         id: start_build
@@ -165,25 +153,24 @@ jobs:
           DEVICES: ${{ env.BSTACK_DEVICES }}
           PROJECT: ${{ env.BSTACK_PROJECT }}
           BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
+          TESTS_JSON: ${{ steps.whitelist.outputs.tests_json }}
         run: |
           set -euo pipefail
-
-          # Build JSON: devices = comma-separated string -> array, with whitespace trimmed
+          # Build JSON payload; include explicit 'tests' list so subflows won't run.
           PAYLOAD=$(jq -n \
             --arg app     "$APP_URL" \
             --arg suite   "$SUITE_URL" \
             --arg project "$PROJECT" \
             --arg build   "$BUILDNAME" \
             --arg devices "$DEVICES" \
+            --argjson tests "${TESTS_JSON:-[]}" \
             '{
                app: $app,
                testSuite: $suite,
                project: $project,
                buildName: $build,
-               devices: ($devices
-                          | split(",")
-                          | map(gsub("^\\s+|\\s+$"; ""))   # trim
-                          | map(select(length > 0)))       # drop empties
+               devices: ($devices | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))),
+               tests: $tests
              }')
 
           echo "Request payload:"
@@ -228,7 +215,6 @@ jobs:
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      # Save BS build payload as artifact too (handy for debugging)
       - name: Upload BrowserStack build JSON
         uses: actions/upload-artifact@v4
         with:
