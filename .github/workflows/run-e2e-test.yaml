@@ -43,16 +43,20 @@ jobs:
           test -n "${{ secrets.BROWSERSTACK_ACCESS_KEY }}" || { echo "Missing secret: BROWSERSTACK_ACCESS_KEY"; exit 1; }
         shell: bash
 
-      # --- Zip only allowed types, exclude meta folders ---
       - name: Prepare suite zip when suite ID is not provided
         id: zip_suite
         if: ${{ inputs.browserstack_suite_id == '' }}
+        shell: bash
         run: |
           set -euo pipefail
           ZIP_NAME="maestro_flows.zip"
+          WRAP_DIR="maestro_flows"
           rm -f "$ZIP_NAME"
+          rm -rf "$WRAP_DIR"
 
-          TMP_DIR="$(mktemp -d)"
+          mkdir -p "$WRAP_DIR"
+
+          # copy ONLY allowed files into wrapper, preserving tree (e.g., subflows/)
           rsync -a --prune-empty-dirs \
             --include='*/' \
             --include='*.yaml' --include='*.yml' \
@@ -63,14 +67,15 @@ jobs:
             --exclude='.maestro/***' \
             --exclude='LICENSE' --exclude='LICENCE' --exclude='README.md' \
             --exclude='*' \
-            ./ "$TMP_DIR/"
+            ./ "$WRAP_DIR/"
 
           echo "== Suite contents =="
-          (cd "$TMP_DIR" && find . -type f | sort)
+          find "$WRAP_DIR" -type f | sed "s|^|  |" | sort
 
-          ( cd "$TMP_DIR" && zip -qr "$GITHUB_WORKSPACE/$ZIP_NAME" . )
+          # zip the wrapper folder (matches your manual ZIP layout)
+          zip -qr "$ZIP_NAME" "$WRAP_DIR"
+
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
-        shell: bash
 
       - name: Upload suite ZIP artifact
         if: ${{ inputs.browserstack_suite_id == '' }}
