@@ -121,73 +121,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t ROOT_TESTS < <(find . -maxdepth 1 -type f \( -iname "*.yml" -o -iname "*.yaml" \) -printf "%f\n" | sort)
+
+          # collect only top-level *.yml / *.yaml (no subfolders)
+          shopt -s nullglob nocaseglob
+          ROOT_TESTS=( *.yml *.yaml )
+          shopt -u nocaseglob
 
           echo "Selected tests:"
-          printf ' - %s\n' "${ROOT_TESTS[@]:-}"
+          for f in "${ROOT_TESTS[@]}"; do
+            echo " - $f"
+          done
 
-          # Multiline output (human friendly)
+          # fail early if nothing found
+          if ((${#ROOT_TESTS[@]} == 0)); then
+            echo "No root-level tests (*.yml/*.yaml) found." >&2
+            exit 1
+          fi
+
+          # 1) newline-delimited list (safe for GitHub Actions)
           {
             echo 'tests<<EOF'
-            for f in "${ROOT_TESTS[@]:-}"; do
+            for f in "${ROOT_TESTS[@]}"; do
               echo "$f"
             done
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-          # Machine output: JSON array to pass to the API
-          if [ "${#ROOT_TESTS[@]:-0}" -gt 0 ]; then
-            JSON=$(printf '"%s",' "${ROOT_TESTS[@]}" | sed 's/,$//')
-            echo "tests_json=[$JSON]" >> "$GITHUB_OUTPUT"
-          else
-            echo "tests_json=[]" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Start BrowserStack Maestro build (Android)
-        id: start_build
-        env:
-          BS_USER: ${{ secrets.BROWSERSTACK_USERNAME }}
-          BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
-          APP_URL: ${{ inputs.browserstack_app_id }}
-          SUITE_URL: ${{ steps.suite_url.outputs.value }}
-          DEVICES: ${{ env.BSTACK_DEVICES }}
-          PROJECT: ${{ env.BSTACK_PROJECT }}
-          BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
-          TESTS_JSON: ${{ steps.whitelist.outputs.tests_json }}
-        run: |
-          set -euo pipefail
-          # Build JSON payload; include explicit 'tests' list so subflows won't run.
-          PAYLOAD=$(jq -n \
-            --arg app     "$APP_URL" \
-            --arg suite   "$SUITE_URL" \
-            --arg project "$PROJECT" \
-            --arg build   "$BUILDNAME" \
-            --arg devices "$DEVICES" \
-            --argjson tests "${TESTS_JSON:-[]}" \
-            '{
-               app: $app,
-               testSuite: $suite,
-               project: $project,
-               buildName: $build,
-               devices: ($devices | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))),
-               tests: $tests
-             }')
-
-          echo "Request payload:"
-          echo "$PAYLOAD" | jq -C .
-
-          RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
-            -H "Content-Type: application/json" \
-            -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
-            -d "$PAYLOAD")
-
-          echo "Response:"
-          echo "$RESP" | jq -C .
-
-          BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
-          test "$BUILD_ID" != "null" -a -n "$BUILD_ID"
-          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
-        shell: bash
+          # 2) JSON array (useful for debugging or future API calls)
+          printf -v JSON '%s' "$(printf '"%s",' "${ROOT_TESTS[@]}" | sed 's/,$//')"
+          echo "tests_json=[${JSON}]" >> "$GITHUB_OUTPUT"
 
       - name: Wait for build to finish
         id: wait_build
