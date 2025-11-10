@@ -47,6 +47,7 @@ jobs:
       # ZIP ONLY ALLOWED FILE TYPES when suite ID is not provided
       # Allowed by BrowserStack: .yaml .yml .js .png .jpeg .jpg .gif .mp4
       # Also exclude: .github/** .maestro/** LICENSE/LICENCE README.md
+      # Uses 'find' to avoid copying the .github/.maestro directory entries.
       # ────────────────────────────────────────────────────────────────────────────
       - name: Prepare suite zip when suite ID is not provided
         id: zip_suite
@@ -56,41 +57,31 @@ jobs:
           ZIP_NAME="maestro_flows.zip"
           rm -f "$ZIP_NAME"
 
-          TMP_DIR="$(mktemp -d)"
-          # Use rsync include/exclude to copy only allowed files into a clean temp dir
-          rsync -a --prune-empty-dirs \
-            --include='*/' \
-            --include='*.yaml' \
-            --include='*.yml' \
-            --include='*.js' \
-            --include='*.png' \
-            --include='*.jpg' \
-            --include='*.jpeg' \
-            --include='*.gif' \
-            --include='*.mp4' \
-            --exclude='.github/***' \
-            --exclude='.maestro/***' \
-            --exclude='LICENSE' \
-            --exclude='LICENCE' \
-            --exclude='README.md' \
-            --exclude='*' \
-            ./ "$TMP_DIR/"
-
-          # Create the zip from the temp dir contents (no wrapper folder)
-          ( cd "$TMP_DIR" && zip -qr "$GITHUB_WORKSPACE/$ZIP_NAME" . )
+          # Build the file list explicitly and zip from stdin (-@), no wrapper dir
+          find . -type f \( \
+              -name '*.yaml' -o -name '*.yml' -o -name '*.js' -o \
+              -name '*.png'  -o -name '*.jpg' -o -name '*.jpeg' -o \
+              -name '*.gif'  -o -name '*.mp4' \
+            \) \
+            -not -path './.github/*' \
+            -not -path './.maestro/*' \
+            -not -name 'LICENSE' \
+            -not -name 'LICENCE' \
+            -not -name 'README.md' \
+          | sed 's|^\./||' \
+          | zip -@ -qr "$ZIP_NAME"
 
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      # ⬇️ New: publish the exact ZIP we’ll send to BrowserStack so you can inspect it
-      - name: Upload prepared suite ZIP as artifact
+      - name: Upload suite ZIP as artifact
         if: ${{ inputs.browserstack_suite_id == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: maestro-suite-${{ github.run_id }}
+          name: maestro_flows
           path: ${{ steps.zip_suite.outputs.zip_path }}
           if-no-files-found: error
-          retention-days: 7
+          overwrite: true
 
       - name: Upload suite zip to BrowserStack (if needed)
         id: upload_suite
