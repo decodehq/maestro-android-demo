@@ -28,14 +28,15 @@ env:
   BSTACK_PROJECT: "Maestro E2E"
   BSTACK_BUILD_NAME: "E2E Run - ${{ github.ref_name }} @ ${{ github.run_number }}"
 
+permissions:
+  contents: write   # needed to push to the Pages branch
+
 jobs:
   maestro-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-
     outputs:
       build_id: ${{ steps.start_build.outputs.build_id }}
-      status:   ${{ steps.wait_build.outputs.status }}
 
     steps:
       - name: Checkout
@@ -234,47 +235,57 @@ jobs:
           retention-days: 7
 
   generate-allure-results:
+    if: ${{ inputs.generate_allure }}
+    needs: [maestro-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    needs: [maestro-e2e]
-
+    outputs:
+      results_zip: ${{ steps.zip_out.outputs.results_zip }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Generate Allure results
-        if: ${{ inputs.generate_allure }}
         uses: ./.github/actions/generate-allure-files
         with:
-          build_id: ${{ needs.maestro-e2e.outputs.build_id }}   # ✅ fixed
+          build_id: ${{ needs.maestro-e2e.outputs.build_id }}
           suite: ${{ env.BSTACK_PROJECT }}
           out_dir: allure-results
           username: ${{ secrets.BROWSERSTACK_USERNAME }}
           access_key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
 
-  publish-allure-report:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [maestro-e2e, generate-allure-results]
-    if: ${{ inputs.generate_allure }}
+      - name: Capture ZIP path for downstream job
+        id: zip_out
+        run: echo "results_zip=allure-results.zip" >> "$GITHUB_OUTPUT"
 
-    steps:
-      - name: Checkout (shallow)
-        uses: actions/checkout@v4
+      - name: Upload zipped Allure results
+        uses: actions/upload-artifact@v4
         with:
-          fetch-depth: 0
+          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
+          path: allure-results.zip
+          if-no-files-found: error
+          retention-days: 14
 
-      - name: Download Allure results artifact
+  publish-allure-to-pages:
+    if: ${{ inputs.generate_allure }}
+    needs: [maestro-e2e, generate-allure-results]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Allure results ZIP
         uses: actions/download-artifact@v4
         with:
           name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
-          path: ./_dl
+          path: .
 
       - name: Publish Allure HTML to Pages branch (non-overwrite)
         uses: ./.github/actions/publish-allure-to-pages
         with:
-          results_zip: ./_dl/allure-results.zip
+          results_zip: allure-results.zip
           build_id: ${{ needs.maestro-e2e.outputs.build_id }}
-          pages_branch: allure-report
-          base_path: reports
-          site_title: "Maestro E2E Allure Reports"
+          pages_branch: allure-report      # your chosen Pages branch
+          base_path: reports               # change if you want
+          site_title: "Allure Reports"
+          folder_prefix: "run-"
