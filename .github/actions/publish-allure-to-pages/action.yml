@@ -1,3 +1,4 @@
+# .github/actions/publish-allure-to-pages/action.yml
 name: "Publish Allure to Pages (non-overwrite)"
 description: "Builds Allure HTML from results and publishes to a Pages branch under a unique subfolder, preserving history."
 author: "you"
@@ -18,7 +19,7 @@ inputs:
     required: false
     default: "reports"
   site_title:
-    description: "Title for index.html"
+    description: "Title for index.html (unused when no index is generated)"
     required: false
     default: "Allure Reports"
   folder_prefix:
@@ -29,21 +30,18 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Set up Java for Allure
-      uses: actions/setup-java@v4
+    - name: Set up Node (for Allure CLI via npm)
+      uses: actions/setup-node@v4
       with:
-        distribution: temurin
-        java-version: "17"
+        node-version: '20'
 
-    - name: Install Allure CLI (latest)
+    - name: Install Allure CLI (npm)
       shell: bash
       run: |
         set -euo pipefail
-        ver=$(curl -s https://api.github.com/repos/allure-framework/allure2/releases/latest | jq -r .tag_name | sed 's/^v//')
-        curl -sL "https://github.com/allure-framework/allure2/releases/download/v${ver}/allure-${ver}.zip" -o /tmp/allure.zip
-        sudo unzip -q /tmp/allure.zip -d /opt
-        echo "/opt/allure-${ver}/bin" >> "$GITHUB_PATH"
-        allure --version
+        npm i -g allure-commandline
+        echo "$(npm root -g)/allure-commandline/bin" >> "$GITHUB_PATH"
+        echo "Allure version: $(allure --version)"
 
     - name: Unzip allure-results
       shell: bash
@@ -51,6 +49,8 @@ runs:
         set -euo pipefail
         mkdir -p ./_work/allure-results
         unzip -q "${{ inputs.results_zip }}" -d ./_work/allure-results
+        echo "Unzipped to _work/allure-results"
+        ls -la ./_work/allure-results || true
 
     - name: Generate Allure HTML
       shell: bash
@@ -59,22 +59,35 @@ runs:
         allure generate ./_work/allure-results -o ./_work/allure-report --clean
         test -f ./_work/allure-report/index.html
 
-    - name: Publish to Pages branch (preserve history)
+    - name: Publish to Pages branch (preserve history, no index.html)
       shell: bash
       env:
         BRANCH: ${{ inputs.pages_branch }}
         BASE:   ${{ inputs.base_path }}
         BID:    ${{ inputs.build_id }}
         PREFIX: ${{ inputs.folder_prefix }}
-        TITLE:  ${{ inputs.site_title }}
       run: |
         set -euo pipefail
 
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        # Fetch or create the Pages branch
-        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-          git fetch origin "$BRANCH":"$BRANCH"
-          git checkout "$BRANCH"
-        el
+        # Check if the branch exists on origin
+        if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null 2>&1; then
+          git fetch origin "$BRANCH":"refs/remotes/origin/$BRANCH" --depth=1
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+        else
+          git checkout --orphan "$BRANCH"
+          git rm -r --cached . >/dev/null 2>&1 || true
+          find . -mindepth 1 -maxdepth 1 -not -name ".git" -exec rm -rf {} +
+        fi
+
+        mkdir -p "$BASE"
+        DEST="$BASE/${PREFIX}${BID}"
+        mkdir -p "$DEST"
+
+        rsync -a --delete ./_work/allure-report/ "$DEST/"
+
+        git add -A
+        git commit -m "Publish Allure report for build ${BID} at ${DEST}" || echo "No changes to commit."
+        git push origin "$BRANCH"
