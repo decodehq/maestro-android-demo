@@ -82,6 +82,16 @@ jobs:
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
         shell: bash
 
+      # ⬇️ New: publish the exact ZIP we’ll send to BrowserStack so you can inspect it
+      - name: Upload prepared suite ZIP as artifact
+        if: ${{ inputs.browserstack_suite_id == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro-suite-${{ github.run_id }}
+          path: ${{ steps.zip_suite.outputs.zip_path }}
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload suite zip to BrowserStack (if needed)
         id: upload_suite
         if: ${{ inputs.browserstack_suite_id == '' }}
