@@ -130,20 +130,30 @@ jobs:
 
       # ✅ Whitelist only top-level tests (depth=1) so subflows aren't executed
       - name: Build tests whitelist (root *.yml/*.yaml only)
-        id: tests_whitelist
+        id: whitelist
+        shell: bash
         run: |
           set -euo pipefail
-          # Collect only YAMLs that live directly in repo root (no slash in the path)
-          mapfile -t FILES < <(git ls-files '*.yml' '*.yaml' | awk '!/\//' | sort)
-          if [ ${#FILES[@]} -eq 0 ]; then
-            echo "No top-level tests found (*.yml/*.yaml at repo root)"; exit 1
-          fi
-          printf 'Selected tests:\n'; printf ' - %s\n' "${FILES[@]}"
+          # Pick only root-level *.yml/*.yaml (exclude folders like subflows/)
+          mapfile -t ROOT_TESTS < <(find . -maxdepth 1 -type f \( -iname "*.yml" -o -iname "*.yaml" \) -printf "%f\n" | sort)
 
-          # Build JSON array: ["Onboarding-flow.yaml","Search-for-article.yaml"]
-          TESTS_JSON=$(printf '%s\n' "${FILES[@]}" | jq -R . | jq -s .)
-          echo "json=$TESTS_JSON" >> "$GITHUB_OUTPUT"
-        shell: bash
+          echo "Selected tests:"
+          for f in "${ROOT_TESTS[@]:-}"; do
+            echo " - $f"
+          done
+
+          # Expose as newline-delimited output (safe for GitHub Actions)
+          {
+            echo 'tests<<EOF'
+            for f in "${ROOT_TESTS[@]:-}"; do
+              echo "$f"
+            done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+          # Optional: also provide a JSON array, if you need it later
+          JSON=$(printf '"%s",' "${ROOT_TESTS[@]:-}" | sed 's/,$//')
+          echo "tests_json=[$JSON]" >> "$GITHUB_OUTPUT"
 
       - name: Start BrowserStack Maestro build (Android)
         id: start_build
