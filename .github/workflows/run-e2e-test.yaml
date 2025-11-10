@@ -29,7 +29,7 @@ env:
   BSTACK_BUILD_NAME: "E2E Run - ${{ github.ref_name }} @ ${{ github.run_number }}"
 
 permissions:
-  contents: write   # needed to push to the Pages branch
+  contents: write
 
 jobs:
   maestro-e2e:
@@ -158,9 +158,14 @@ jobs:
             --arg build   "$BUILDNAME" \
             --arg devices "$DEVICES" \
             --argjson tests "${TESTS_JSON:-[]}" \
-            '{ app: $app, testSuite: $suite, project: $project, buildName: $build,
+            '{
+               app: $app,
+               testSuite: $suite,
+               project: $project,
+               buildName: $build,
                devices: ($devices | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))),
-               tests: $tests }')
+               tests: $tests
+             }')
           echo "Request payload:"; echo "$PAYLOAD" | jq -C .
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -H "Content-Type: application/json" \
@@ -191,7 +196,9 @@ jobs:
             STATUS=$(echo "$RESP" | jq -r '.status')
             echo "[$(date -u +%H:%M:%S)] Build $BUILD_ID status: $STATUS"
             echo "$RESP" > "artifacts/build-$BUILD_ID.json"
-            if [[ "$STATUS" =~ ^(passed|failed|error|stopped|timedout)$ ]]; then break; fi
+            if [[ "$STATUS" =~ ^(passed|failed|error|stopped|timedout)$ ]]; then
+              break
+            fi
             sleep $SLEEP
           done
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
@@ -214,7 +221,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate Allure results
+      - name: Generate Allure results (and upload artifact)
         uses: ./.github/actions/generate-allure-files
         with:
           build_id: ${{ needs.maestro-e2e.outputs.build_id }}
@@ -223,13 +230,8 @@ jobs:
           username: ${{ secrets.BROWSERSTACK_USERNAME }}
           access_key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
 
-      - name: Upload zipped Allure results
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
-          path: ${{ steps.generate-allure-results.outputs.zip_path }}
-          if-no-files-found: error
-          retention-days: 14
+      # ⛔️ No extra upload step here — the composite already uploaded
+      # an artifact named: allure-results-${build_id}
 
   publish-allure-to-pages:
     if: ${{ inputs.generate_allure }}

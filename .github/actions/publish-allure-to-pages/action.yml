@@ -1,33 +1,33 @@
-name: "Publish Allure to Pages (non-overwrite)"
-description: "Builds Allure HTML from results and publishes to a Pages branch under a unique subfolder, preserving history."
-author: "you"
+name: Publish Allure to Pages (non-overwrite)
+description: Builds Allure HTML from results and publishes to a Pages branch under a unique subfolder, preserving history.
+author: you
 
 inputs:
   results_zip:
-    description: "Path to zipped allure-results created earlier"
+    description: Path to zipped allure-results created earlier
     required: true
   build_id:
-    description: "Build ID used as folder name"
+    description: Build ID used as folder name
     required: true
   pages_branch:
-    description: "Branch that GitHub Pages serves from"
+    description: Branch that GitHub Pages serves from
     required: false
-    default: "allure-report"
+    default: allure-report
   base_path:
-    description: "Base folder on the Pages branch to store reports"
+    description: Base folder on the Pages branch to store reports
     required: false
-    default: "reports"
+    default: reports
   site_title:
-    description: "Title for index.html"
+    description: Title for index.html
     required: false
-    default: "Allure Reports"
+    default: Allure Reports
   folder_prefix:
-    description: "Optional prefix for the folder (e.g., run-). Final path: base_path/<prefix><build_id>/"
+    description: Optional prefix for the folder (e.g., run-). Final path: base_path/<prefix><build_id>/
     required: false
     default: ""
 
 runs:
-  using: "composite"
+  using: composite
   steps:
     - name: Set up Node (for Allure CLI via npm)
       uses: actions/setup-node@v4
@@ -86,24 +86,24 @@ runs:
 
         tmpindex=$(mktemp)
         cat > "$tmpindex" <<'HTML'
-<!doctype html>
-<meta charset="utf-8">
-<title>__TITLE__</title>
-<style>
-  body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.5;background:#0b0b0c;color:#e6e6e6}
-  a{color:#79c0ff;text-decoration:none}
-  h1{font-weight:600;margin:0 0 16px}
-  ul{list-style:none;padding:0}
-  li{margin:8px 0}
-  .path{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
-</style>
-<h1>__TITLE__</h1>
-<ul>
-HTML
+        <!doctype html>
+        <meta charset="utf-8">
+        <title>__TITLE__</title>
+        <style>
+          body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.5;background:#0b0b0c;color:#e6e6e6}
+          a{color:#79c0ff;text-decoration:none}
+          h1{font-weight:600;margin:0 0 16px}
+          ul{list-style:none;padding:0}
+          li{margin:8px 0}
+          .path{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
+        </style>
+        <h1>__TITLE__</h1>
+        <ul>
+        HTML
         if [ -d "$BASE" ]; then
           for d in $(ls -1 "$BASE"); do
             echo "$BASE/$d"
-          done | sort -r | while read p; do
+          done | sort -r | while read -r p; do
             rel="${p#"$BASE/"}"
             echo "<li>🗂 <a class=\"path\" href=\"./$BASE/$rel/\">$rel</a></li>" >> "$tmpindex"
           done
