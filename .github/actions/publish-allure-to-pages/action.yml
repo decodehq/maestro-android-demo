@@ -1,63 +1,62 @@
-# .github/actions/publish-allure-to-pages/action.yml
 name: "Publish Allure to Pages (non-overwrite)"
-description: "Builds Allure HTML from results and publishes to a Pages branch under a unique subfolder, preserving history."
+description: "Build Allure HTML from results and push to a Pages branch under a unique subfolder, preserving history."
 author: "you"
 
 inputs:
   results_zip:
-    description: "Path to zipped allure-results created earlier"
+    description: "Path to a ZIP of allure-results (relative to repo root or absolute)"
     required: true
   build_id:
-    description: "Build ID used as folder name"
+    description: "Folder name to use on the Pages branch (e.g. a build/run id)"
     required: true
   pages_branch:
-    description: "Branch that GitHub Pages serves from (Settings → Pages)"
+    description: "Branch that GitHub Pages serves from"
     required: false
     default: "allure-report"
   base_path:
-    description: "Base folder on the Pages branch to store reports"
+    description: "Base folder on the Pages branch where reports live"
     required: false
     default: "reports"
   site_title:
-    description: "Title for index.html (unused when no index is generated)"
+    description: "Unused here (we don’t generate index.html in this version)"
     required: false
     default: "Allure Reports"
   folder_prefix:
-    description: "Optional prefix for the folder (e.g., run-). Final path: base_path/<prefix><build_id>/"
+    description: "Optional folder prefix (e.g. run-). Final path: base_path/<prefix><build_id>/"
     required: false
     default: ""
 
 runs:
   using: "composite"
   steps:
-    - name: Set up Node (for Allure CLI via npm)
+    # Allure via npm is the most reliable on runners.
+    - name: Set up Node (for Allure CLI)
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
-    - name: Install Allure CLI (npm)
+    - name: Install Allure CLI
       shell: bash
       run: |
         set -euo pipefail
         npm i -g allure-commandline
         echo "$(npm root -g)/allure-commandline/bin" >> "$GITHUB_PATH"
-        echo "Allure version: $(allure --version)"
+        allure --version || true
 
     - name: Unzip allure-results
       shell: bash
       run: |
         set -euo pipefail
-        mkdir -p ./_work/allure-results
-        unzip -q "${{ inputs.results_zip }}" -d ./_work/allure-results
-        echo "Unzipped to _work/allure-results"
-        ls -la ./_work/allure-results || true
+        mkdir -p _work/allure-results
+        unzip -q "${{ inputs.results_zip }}" -d _work/allure-results
+        test -d _work/allure-results
 
     - name: Generate Allure HTML
       shell: bash
       run: |
         set -euo pipefail
-        allure generate ./_work/allure-results -o ./_work/allure-report --clean
-        test -f ./_work/allure-report/index.html
+        allure generate _work/allure-results -o _work/allure-report --clean
+        test -f _work/allure-report/index.html
 
     - name: Publish to Pages branch (preserve history, no index.html)
       shell: bash
@@ -69,16 +68,16 @@ runs:
       run: |
         set -euo pipefail
 
+        # Ensure we're inside a git worktree (requires actions/checkout before this action!)
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        # Check if the branch exists on origin
-        if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null 2>&1; then
+        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
           git fetch origin "$BRANCH":"refs/remotes/origin/$BRANCH" --depth=1
           git checkout -B "$BRANCH" "origin/$BRANCH"
         else
           git checkout --orphan "$BRANCH"
-          git rm -r --cached . >/dev/null 2>&1 || true
+          # wipe the worktree except .git
           find . -mindepth 1 -maxdepth 1 -not -name ".git" -exec rm -rf {} +
         fi
 
@@ -86,7 +85,13 @@ runs:
         DEST="$BASE/${PREFIX}${BID}"
         mkdir -p "$DEST"
 
-        rsync -a --delete ./_work/allure-report/ "$DEST/"
+        # rsync is available on ubuntu-latest; fall back to cp if missing
+        if command -v rsync >/dev/null 2>&1; then
+          rsync -a --delete _work/allure-report/ "$DEST/"
+        else
+          rm -rf "$DEST"/*
+          cp -a _work/allure-report/. "$DEST/"
+        fi
 
         git add -A
         git commit -m "Publish Allure report for build ${BID} at ${DEST}" || echo "No changes to commit."
