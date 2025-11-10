@@ -56,7 +56,6 @@ jobs:
 
           mkdir -p "$WRAP_DIR"
 
-          # copy ONLY allowed files into wrapper, preserving tree (e.g., subflows/)
           rsync -a --prune-empty-dirs \
             --include='*/' \
             --include='*.yaml' --include='*.yml' \
@@ -72,9 +71,7 @@ jobs:
           echo "== Suite contents =="
           find "$WRAP_DIR" -type f | sed "s|^|  |" | sort
 
-          # zip the wrapper folder (matches your manual ZIP layout)
           zip -qr "$ZIP_NAME" "$WRAP_DIR"
-
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Upload suite ZIP artifact
@@ -126,7 +123,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # collect only top-level *.yml / *.yaml (no subfolders)
           shopt -s nullglob nocaseglob
           ROOT_TESTS=( *.yml *.yaml )
           shopt -u nocaseglob
@@ -136,13 +132,11 @@ jobs:
             echo " - $f"
           done
 
-          # fail early if nothing found
           if ((${#ROOT_TESTS[@]} == 0)); then
             echo "No root-level tests (*.yml/*.yaml) found." >&2
             exit 1
           fi
 
-          # 1) newline-delimited list (safe for GitHub Actions)
           {
             echo 'tests<<EOF'
             for f in "${ROOT_TESTS[@]}"; do
@@ -151,7 +145,6 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-          # 2) JSON array (useful for debugging or future API calls)
           printf -v JSON '%s' "$(printf '"%s",' "${ROOT_TESTS[@]}" | sed 's/,$//')"
           echo "tests_json=[${JSON}]" >> "$GITHUB_OUTPUT"
 
@@ -168,7 +161,6 @@ jobs:
           TESTS_JSON: ${{ steps.whitelist.outputs.tests_json }}
         run: |
           set -euo pipefail
-          # Build JSON payload; include explicit 'tests' list so subflows won't run.
           PAYLOAD=$(jq -n \
             --arg app     "$APP_URL" \
             --arg suite   "$SUITE_URL" \
@@ -198,7 +190,12 @@ jobs:
 
           BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
           test "$BUILD_ID" != "null" -a -n "$BUILD_ID"
+
+          # outputs
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+
+          # ✅ export as env var for the rest of the job
+          echo "BROWSERSTACK_BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
         shell: bash
 
       - name: Wait for build to finish
@@ -234,3 +231,13 @@ jobs:
           path: artifacts/build-*.json
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Generate Allure results
+        if: ${{ inputs.generate_allure }}
+        uses: ./.github/actions/generate-allure-files
+        with:
+          build_id: ${{ steps.start_build.outputs.build_id }}
+          suite: ${{ env.BSTACK_PROJECT }}
+          out_dir: allure-results
+          username: ${{ secrets.BROWSERSTACK_USERNAME }}
+          access_key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}

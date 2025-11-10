@@ -1,0 +1,94 @@
+name: "Generate Allure files (BrowserStack Maestro)"
+description: "Converts a BrowserStack Maestro build into Allure results using maestro_all_to_allure.py"
+author: "you"
+
+inputs:
+  build_id:
+    description: "BrowserStack Maestro build ID"
+    required: true
+  suite:
+    description: "Allure suite name"
+    required: true
+  out_dir:
+    description: "Output directory for Allure results"
+    required: false
+    default: "allure-results"
+  username:
+    description: "BrowserStack username (optional if provided via env)"
+    required: false
+    default: ""
+  access_key:
+    description: "BrowserStack access key (optional if provided via env)"
+    required: false
+    default: ""
+
+outputs:
+  results_dir:
+    description: "Directory containing generated Allure result files"
+    value: ${{ steps.prepare.outputs.results_dir }}
+  zip_path:
+    description: "Path to the zipped Allure results"
+    value: ${{ steps.zip.outputs.zip_path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.x"
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Prepare paths
+      id: prepare
+      shell: bash
+      run: |
+        set -euo pipefail
+        OUT_DIR="${{ inputs.out_dir }}"
+        mkdir -p "$OUT_DIR"
+        echo "results_dir=$OUT_DIR" >> "$GITHUB_OUTPUT"
+
+    - name: Generate Allure results
+      shell: bash
+      env:
+        # Allow either inputs or pre-set env vars
+        BROWSERSTACK_USERNAME: ${{ inputs.username || env.BROWSERSTACK_USERNAME }}
+        BROWSERSTACK_ACCESS_KEY: ${{ inputs.access_key || env.BROWSERSTACK_ACCESS_KEY }}
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${BROWSERSTACK_USERNAME:-}" || -z "${BROWSERSTACK_ACCESS_KEY:-}" ]]; then
+          echo "ERROR: BrowserStack credentials are not available. Provide inputs.username/access_key or set env vars." >&2
+          exit 2
+        fi
+
+        python "$GITHUB_ACTION_PATH/maestro_all_to_allure.py" \
+          --build-id "${{ inputs.build_id }}" \
+          --out-dir "${{ steps.prepare.outputs.results_dir }}" \
+          --suite "${{ inputs.suite }}"
+
+    - name: Zip Allure results
+      id: zip
+      shell: bash
+      run: |
+        set -euo pipefail
+        OUT_DIR="${{ steps.prepare.outputs.results_dir }}"
+        ZIP_NAME="allure-results-${{ inputs.build_id }}.zip"
+        rm -f "$ZIP_NAME"
+        # zip contents of OUT_DIR into a single zip at repo root
+        (cd "$OUT_DIR" && zip -qr "$GITHUB_WORKSPACE/$ZIP_NAME" .)
+        echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+    - name: Upload zipped Allure results
+      uses: actions/upload-artifact@v4
+      with:
+        name: allure-results-${{ inputs.build_id }}
+        path: ${{ steps.zip.outputs.zip_path }}
+        if-no-files-found: error
+        retention-days: 7
