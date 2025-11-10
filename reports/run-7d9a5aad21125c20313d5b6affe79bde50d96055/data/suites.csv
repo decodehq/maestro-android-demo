@@ -1,0 +1,3 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","70872","Search flow","","Mon Nov 10 20:06:57 UTC 2025","passed","Mon Nov 10 20:08:07 UTC 2025","","Maestro E2E","",""
+"","14955","Onboarding flow","","Mon Nov 10 20:06:57 UTC 2025","passed","Mon Nov 10 20:07:11 UTC 2025","","Maestro E2E","",""
