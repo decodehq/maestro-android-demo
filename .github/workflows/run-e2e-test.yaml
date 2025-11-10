@@ -43,8 +43,11 @@ jobs:
           test -n "${{ secrets.BROWSERSTACK_ACCESS_KEY }}" || { echo "Missing secret: BROWSERSTACK_ACCESS_KEY"; exit 1; }
         shell: bash
 
-      # Create a clean ZIP that only contains BrowserStack-allowed file types.
-      # Also excludes .github/**, .maestro/**, LICENSE/LICENCE, README.md
+      # ────────────────────────────────────────────────────────────────────────────
+      # ZIP ONLY ALLOWED FILE TYPES when suite ID is not provided
+      # Allowed by BrowserStack: .yaml .yml .js .png .jpeg .jpg .gif .mp4
+      # Also exclude: .github/** .maestro/** LICENSE/LICENCE README.md
+      # ────────────────────────────────────────────────────────────────────────────
       - name: Prepare suite zip when suite ID is not provided
         id: zip_suite
         if: ${{ inputs.browserstack_suite_id == '' }}
@@ -54,15 +57,7 @@ jobs:
           rm -f "$ZIP_NAME"
 
           TMP_DIR="$(mktemp -d)"
-
-          # IMPORTANT: in rsync the first matching rule wins.
-          # Put EXCLUDES first, then the generic directory include, then file includes.
           rsync -a --prune-empty-dirs \
-            --exclude='.github/***' \
-            --exclude='.maestro/***' \
-            --exclude='LICENSE' \
-            --exclude='LICENCE' \
-            --exclude='README.md' \
             --include='*/' \
             --include='*.yaml' \
             --include='*.yml' \
@@ -72,17 +67,24 @@ jobs:
             --include='*.jpeg' \
             --include='*.gif' \
             --include='*.mp4' \
+            --exclude='.github/***' \
+            --exclude='.maestro/***' \
+            --exclude='LICENSE' \
+            --exclude='LICENCE' \
+            --exclude='README.md' \
             --exclude='*' \
             ./ "$TMP_DIR/"
 
-          # Zip the CONTENTS of TMP_DIR (no wrapper folder in the archive)
-          ( cd "$TMP_DIR" && zip -qr "$GITHUB_WORKSPACE/$ZIP_NAME" . )
+          # Debug: list what will be zipped
+          echo "== Suite contents =="
+          (cd "$TMP_DIR" && find . -type f | sort)
 
+          ( cd "$TMP_DIR" && zip -qr "$GITHUB_WORKSPACE/$ZIP_NAME" . )
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      # Upload the ZIP as a workflow artifact so you can inspect it
-      - name: Upload suite ZIP artifact (for inspection)
+      # 📦 Upload the produced suite ZIP as a workflow artifact (so you can inspect it)
+      - name: Upload suite ZIP artifact
         if: ${{ inputs.browserstack_suite_id == '' }}
         uses: actions/upload-artifact@v4
         with:
@@ -99,16 +101,16 @@ jobs:
           BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
         run: |
           set -euo pipefail
-          # custom_id: only [a-zA-Z0-9._-] are allowed
+          # Sanitize custom_id: only [A-Za-z0-9._-] allowed
           RAW_ID="${{ github.repository }}-${{ github.ref_name }}-${{ github.run_id }}"
-          SAFE_ID="$(echo "$RAW_ID" | tr -cd '[:alnum:]._-' )"
+          CUSTOM_ID="$(echo "$RAW_ID" | tr '[:space:]' '_' | sed 's/[^A-Za-z0-9._-]/_/g')"
 
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" \
             -F "file=@${{ steps.zip_suite.outputs.zip_path }}" \
-            -F "custom_id=$SAFE_ID")
-
+            -F "custom_id=$CUSTOM_ID")
           echo "$RESP"
+
           SUITE_URL=$(echo "$RESP" | jq -r '.test_suite_url')
           SUITE_ID=$(echo "$RESP" | jq -r '.test_suite_id')
           test "$SUITE_URL" != "null"
@@ -126,6 +128,23 @@ jobs:
           fi
         shell: bash
 
+      # ✅ Whitelist only top-level tests (depth=1) so subflows aren't executed
+      - name: Build tests whitelist (root *.yml/*.yaml only)
+        id: tests_whitelist
+        run: |
+          set -euo pipefail
+          # Collect only YAMLs that live directly in repo root (no slash in the path)
+          mapfile -t FILES < <(git ls-files '*.yml' '*.yaml' | awk '!/\//' | sort)
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No top-level tests found (*.yml/*.yaml at repo root)"; exit 1
+          fi
+          printf 'Selected tests:\n'; printf ' - %s\n' "${FILES[@]}"
+
+          # Build JSON array: ["Onboarding-flow.yaml","Search-for-article.yaml"]
+          TESTS_JSON=$(printf '%s\n' "${FILES[@]}" | jq -R . | jq -s .)
+          echo "json=$TESTS_JSON" >> "$GITHUB_OUTPUT"
+        shell: bash
+
       - name: Start BrowserStack Maestro build (Android)
         id: start_build
         env:
@@ -136,28 +155,29 @@ jobs:
           DEVICES: ${{ env.BSTACK_DEVICES }}
           PROJECT: ${{ env.BSTACK_PROJECT }}
           BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
+          TESTS_JSON: ${{ steps.tests_whitelist.outputs.json }}
         run: |
           set -euo pipefail
-
           IFS=',' read -r -a DEV_ARR <<< "$DEVICES"
           DEV_JSON=$(printf '"%s",' "${DEV_ARR[@]}" | sed 's/,$//')
 
+          # Payload with explicit tests whitelist
           PAYLOAD=$(jq -n \
             --arg app "$APP_URL" \
             --arg suite "$SUITE_URL" \
             --arg project "$PROJECT" \
             --arg build "$BUILDNAME" \
             --argjson devices "[$DEV_JSON]" \
-            '{app: $app, testSuite: $suite, project: $project, buildName: $build, devices: $devices }')
+            --argjson tests "$TESTS_JSON" \
+            '{app: $app, testSuite: $suite, project: $project, buildName: $build, devices: $devices, tests: $tests }')
 
-          echo "$PAYLOAD" | jq -C .
+          echo "Request:"; echo "$PAYLOAD" | jq -C .
 
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -H "Content-Type: application/json" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
             -d "$PAYLOAD")
-
-          echo "$RESP" | jq -C .
+          echo "Response:"; echo "$RESP" | jq -C .
 
           BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
           test "$BUILD_ID" != "null"
@@ -182,10 +202,19 @@ jobs:
             STATUS=$(echo "$RESP" | jq -r '.status')
             echo "[$(date -u +%H:%M:%S)] Build $BUILD_ID status: $STATUS"
             echo "$RESP" > "artifacts/build-$BUILD_ID.json"
-            if [ "$STATUS" = "passed" ] || [ "$STATUS" = "failed" ] || [ "$STATUS" = "error" ] || [ "$STATUS" = "stopped" ] || [ "$STATUS" = "timedout" ]; then
+            if [[ "$STATUS" =~ ^(passed|failed|error|stopped|timedout)$ ]]; then
               break
             fi
             sleep $SLEEP
           done
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
         shell: bash
+
+      # Save BS build payload as artifact too (handy for debugging)
+      - name: Upload BrowserStack build JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: browserstack-build
+          path: artifacts/build-*.json
+          if-no-files-found: ignore
+          retention-days: 7
