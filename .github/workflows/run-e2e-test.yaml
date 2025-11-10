@@ -237,6 +237,16 @@ jobs:
     if: ${{ inputs.generate_allure }}
     needs: [maestro-e2e, generate-allure-results]
     runs-on: ubuntu-latest
+    outputs:
+      allure_url:   ${{ steps.publish.outputs.allure_url }}
+      base_url:     ${{ steps.publish.outputs.base_url }}
+      report_path:  ${{ steps.publish.outputs.report_path }}
+      passed:       ${{ steps.publish.outputs.passed }}
+      failed:       ${{ steps.publish.outputs.failed }}
+      broken:       ${{ steps.publish.outputs.broken }}
+      skipped:      ${{ steps.publish.outputs.skipped }}
+      total:        ${{ steps.publish.outputs.total }}
+      duration_ms:  ${{ steps.publish.outputs.duration_ms }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -248,7 +258,7 @@ jobs:
           path: .
 
       - name: Publish Allure HTML to Pages branch (non-overwrite)
-        id: publish_pages
+        id: publish
         uses: ./.github/actions/publish-allure-to-pages
         with:
           results_zip: allure-results-${{ needs.maestro-e2e.outputs.build_id }}.zip
@@ -257,14 +267,80 @@ jobs:
           base_path: reports
           folder_prefix: "run-"
 
-      # 1) Annotation with a clickable link (shows in the job log)
-      - name: Add annotation with Allure link
-        run: |
-          echo "::notice title=Allure Report::${{ steps.publish_pages.outputs.report_url }}"
-          echo "[Allure Report](${{ steps.publish_pages.outputs.report_url }})" >> "$GITHUB_STEP_SUMMARY"
+      # Persist the URL to this job's environment (handy for adjacent steps in this job)
+      - name: Export ALLURE_REPORT_URL for this job
+        shell: bash
+        run: echo "ALLURE_REPORT_URL=${{ steps.publish.outputs.allure_url }}" >> "$GITHUB_ENV"
 
-      # 2) Save as environment variable for later steps in this job
-      - name: Export ALLURE_REPORT_URL
+  notify:
+    # Run even if something failed, but only if we intended to generate Allure
+    if: ${{ always() && inputs.generate_allure }}
+    needs: [maestro-e2e, publish-allure-to-pages]
+    runs-on: ubuntu-latest
+    env:
+      ALLURE_URL:    ${{ needs.publish-allure-to-pages.outputs.allure_url }}
+      PASSED:        ${{ needs.publish-allure-to-pages.outputs.passed }}
+      FAILED:        ${{ needs.publish-allure-to-pages.outputs.failed }}
+      BROKEN:        ${{ needs.publish-allure-to-pages.outputs.broken }}
+      SKIPPED:       ${{ needs.publish-allure-to-pages.outputs.skipped }}
+      TOTAL:         ${{ needs.publish-allure-to-pages.outputs.total }}
+      DURATION_MS:   ${{ needs.publish-allure-to-pages.outputs.duration_ms }}
+      RUN_URL:       ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      BRANCH:        ${{ github.ref_name }}
+    steps:
+      - name: Send Slack summary (Incoming Webhook)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        shell: bash
         run: |
-          echo "ALLURE_REPORT_URL=${{ steps.publish_pages.outputs.report_url }}" >> "$GITHUB_ENV"
-          echo "Allure link: $ALLURE_REPORT_URL"
+          set -euo pipefail
+
+          # Decide headline/status based on failures
+          STATUS="PASSED"
+          ICON=":white_check_mark:"
+          if [ "${FAILED}" != "0" ] || [ "${BROKEN}" != "0" ]; then
+            STATUS="FAILED"
+            ICON=":x:"
+          fi
+
+          # Humanize duration (rough)
+          dur_ms=${DURATION_MS:-0}
+          dur_s=$(( dur_ms / 1000 ))
+          h=$(( dur_s / 3600 ))
+          m=$(( (dur_s % 3600) / 60 ))
+          s=$(( dur_s % 60 ))
+          DURATION_FMT=$(printf "%d:%02d:%02d" "$h" "$m" "$s")
+
+          # Build Slack payload with blocks
+          payload=$(jq -n \
+            --arg icon    "$ICON" \
+            --arg status  "$STATUS" \
+            --arg branch  "$BRANCH" \
+            --arg passed  "$PASSED" \
+            --arg failed  "$FAILED" \
+            --arg broken  "$BROKEN" \
+            --arg skipped "$SKIPPED" \
+            --arg total   "$TOTAL" \
+            --arg dur     "$DURATION_FMT" \
+            --arg allure  "$ALLURE_URL" \
+            --arg runurl  "$RUN_URL" \
+            '{
+              blocks: [
+                { type: "header", text: { type: "plain_text", text: "\($icon) E2E tests \($status) on branch \($branch)" } },
+                { type: "section", fields: [
+                    { type: "mrkdwn", text: "*Passed:*\n\($passed)" },
+                    { type: "mrkdwn", text: "*Failed:*\n\($failed)" },
+                    { type: "mrkdwn", text: "*Broken:*\n\($broken)" },
+                    { type: "mrkdwn", text: "*Skipped:*\n\($skipped)" },
+                    { type: "mrkdwn", text: "*Total:*\n\($total)" },
+                    { type: "mrkdwn", text: "*Duration:*\n\($dur)" }
+                  ]
+                },
+                { type: "divider" },
+                { type: "section", text: { type: "mrkdwn", text: "*Useful links:*\n• <\($allure)|Allure Report>\n• <\($runurl)|GitHub Run>" } }
+              ]
+            }')
+
+          curl -sSf -X POST -H 'Content-type: application/json' \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL"
