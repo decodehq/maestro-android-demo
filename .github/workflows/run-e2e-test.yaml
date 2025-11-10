@@ -33,6 +33,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
+    outputs:
+      build_id: ${{ steps.start_build.outputs.build_id }}
+      status:   ${{ steps.wait_build.outputs.status }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -191,10 +195,7 @@ jobs:
           BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
           test "$BUILD_ID" != "null" -a -n "$BUILD_ID"
 
-          # outputs
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
-
-          # ✅ export as env var for the rest of the job
           echo "BROWSERSTACK_BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
         shell: bash
 
@@ -232,12 +233,48 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  generate-allure-results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: [maestro-e2e]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Generate Allure results
         if: ${{ inputs.generate_allure }}
         uses: ./.github/actions/generate-allure-files
         with:
-          build_id: ${{ steps.start_build.outputs.build_id }}
+          build_id: ${{ needs.maestro-e2e.outputs.build_id }}   # ✅ fixed
           suite: ${{ env.BSTACK_PROJECT }}
           out_dir: allure-results
           username: ${{ secrets.BROWSERSTACK_USERNAME }}
           access_key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+
+  publish-allure-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [maestro-e2e, generate-allure-results]
+    if: ${{ inputs.generate_allure }}
+
+    steps:
+      - name: Checkout (shallow)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Allure results artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
+          path: ./_dl
+
+      - name: Publish Allure HTML to Pages branch (non-overwrite)
+        uses: ./.github/actions/publish-allure-to-pages
+        with:
+          results_zip: ./_dl/allure-results.zip
+          build_id: ${{ needs.maestro-e2e.outputs.build_id }}
+          pages_branch: allure-report
+          base_path: reports
+          site_title: "Maestro E2E Allure Reports"
