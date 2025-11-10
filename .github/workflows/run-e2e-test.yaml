@@ -43,10 +43,8 @@ jobs:
           test -n "${{ secrets.BROWSERSTACK_ACCESS_KEY }}" || { echo "Missing secret: BROWSERSTACK_ACCESS_KEY"; exit 1; }
         shell: bash
 
-      # ──────────────────────────────────────────────────────────────────────
-      # Create a clean ZIP with only BrowserStack-allowed file extensions.
-      # Exclude .github/** and .maestro/** completely (no empty dirs either).
-      # ──────────────────────────────────────────────────────────────────────
+      # Create a clean ZIP that only contains BrowserStack-allowed file types.
+      # Also excludes .github/**, .maestro/**, LICENSE/LICENCE, README.md
       - name: Prepare suite zip when suite ID is not provided
         id: zip_suite
         if: ${{ inputs.browserstack_suite_id == '' }}
@@ -57,29 +55,38 @@ jobs:
 
           TMP_DIR="$(mktemp -d)"
 
-          # Copy only allowed types and prune excluded dirs entirely.
+          # IMPORTANT: in rsync the first matching rule wins.
+          # Put EXCLUDES first, then the generic directory include, then file includes.
           rsync -a --prune-empty-dirs \
-            --exclude='/.github' --exclude='/.github/***' \
-            --exclude='/.maestro' --exclude='/.maestro/***' \
-            --exclude='/LICENSE' --exclude='/LICENCE' --exclude='/README.md' \
+            --exclude='.github/***' \
+            --exclude='.maestro/***' \
+            --exclude='LICENSE' \
+            --exclude='LICENCE' \
+            --exclude='README.md' \
             --include='*/' \
-            --include='*.yaml' --include='*.yml' --include='*.js' \
-            --include='*.png'  --include='*.jpg' --include='*.jpeg' \
-            --include='*.gif'  --include='*.mp4' \
+            --include='*.yaml' \
+            --include='*.yml' \
+            --include='*.js' \
+            --include='*.png' \
+            --include='*.jpg' \
+            --include='*.jpeg' \
+            --include='*.gif' \
+            --include='*.mp4' \
             --exclude='*' \
             ./ "$TMP_DIR/"
 
+          # Zip the CONTENTS of TMP_DIR (no wrapper folder in the archive)
           ( cd "$TMP_DIR" && zip -qr "$GITHUB_WORKSPACE/$ZIP_NAME" . )
 
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      # ✅ Upload the ZIP so you can inspect it in the Actions run
-      - name: Upload prepared suite ZIP as artifact
+      # Upload the ZIP as a workflow artifact so you can inspect it
+      - name: Upload suite ZIP artifact (for inspection)
         if: ${{ inputs.browserstack_suite_id == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: maestro_suite_zip
+          name: maestro_flows_zip
           path: ${{ steps.zip_suite.outputs.zip_path }}
           if-no-files-found: error
           retention-days: 7
@@ -92,15 +99,14 @@ jobs:
           BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
         run: |
           set -euo pipefail
-
-          # Build a safe custom_id: letters, digits, dot, underscore, hyphen only.
-          RAW_ID="${{ github.repository }}-${{ github.run_id }}"
-          SAFE_ID="$(echo "$RAW_ID" | tr '/ ' '__' | tr -cd '[:alnum:]._-' )"
+          # custom_id: only [a-zA-Z0-9._-] are allowed
+          RAW_ID="${{ github.repository }}-${{ github.ref_name }}-${{ github.run_id }}"
+          SAFE_ID="$(echo "$RAW_ID" | tr -cd '[:alnum:]._-' )"
 
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" \
             -F "file=@${{ steps.zip_suite.outputs.zip_path }}" \
-            -F "custom_id=${SAFE_ID}")
+            -F "custom_id=$SAFE_ID")
 
           echo "$RESP"
           SUITE_URL=$(echo "$RESP" | jq -r '.test_suite_url')
@@ -132,6 +138,7 @@ jobs:
           BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
         run: |
           set -euo pipefail
+
           IFS=',' read -r -a DEV_ARR <<< "$DEVICES"
           DEV_JSON=$(printf '"%s",' "${DEV_ARR[@]}" | sed 's/,$//')
 
@@ -165,7 +172,7 @@ jobs:
           BUILD_ID: ${{ steps.start_build.outputs.build_id }}
         run: |
           set -euo pipefail
-          ATTEMPTS=720   # ~2 hours (every 10s)
+          ATTEMPTS=720
           SLEEP=10
           STATUS="running"
           mkdir -p artifacts
