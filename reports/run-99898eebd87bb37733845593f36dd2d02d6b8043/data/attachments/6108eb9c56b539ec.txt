@@ -1,0 +1,69 @@
+21:07:54.180 [ INFO] MAESTRO.logSystemInfo: ---- System Info ----
+21:07:54.182 [ INFO] MAESTRO.logSystemInfo: Maestro Version: 1.39.13
+21:07:54.183 [ INFO] MAESTRO.logSystemInfo: CI: Undefined
+21:07:54.184 [ INFO] MAESTRO.logSystemInfo: OS Name: Linux
+21:07:54.184 [ INFO] MAESTRO.logSystemInfo: OS Version: 5.16.12-200.fc35.x86_64
+21:07:54.184 [ INFO] MAESTRO.logSystemInfo: Architecture: amd64
+21:07:54.184 [ INFO] MAESTRO.logSystemInfo: Java Version: 11
+21:07:54.187 [ INFO] MAESTRO.logSystemInfo: Xcode Version: null
+21:07:54.188 [ INFO] MAESTRO.logSystemInfo: Flutter Version: Undefined
+21:07:54.189 [ INFO] MAESTRO.logSystemInfo: Flutter Channel: Undefined
+21:07:54.189 [ INFO] MAESTRO.logSystemInfo: ---------------------
+21:07:54.898 [DEBUG] io.micrometer.common.util.internal.logging.InternalLoggerFactory.newDefaultFactory: Using SLF4J as the default logging framework
+21:07:55.185 [ INFO] maestro.cli.command.TestCommand.runShardSuite: [shard 1] Selected device 28031FDH20002A using port 38380
+21:07:57.682 [ INFO] maestro.Maestro.invoke: Getting device info
+21:07:57.994 [ INFO] maestro.Maestro.invoke: Got device info: DeviceInfo(platform=ANDROID, widthPixels=1080, heightPixels=2400, widthGrid=1080, heightGrid=2400)
+21:07:58.131 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Define variables RUNNING
+21:07:58.139 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Define variables COMPLETED
+21:07:58.139 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration RUNNING
+21:07:58.139 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration COMPLETED
+21:07:58.139 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Launch app "org.wikipedia.alpha" with clear state RUNNING
+21:07:58.140 [ INFO] maestro.Maestro.clearAppState: Clearing app state org.wikipedia.alpha
+21:08:02.407 [ INFO] maestro.Maestro.launchApp: Launching app org.wikipedia.alpha
+21:08:02.606 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Launch app "org.wikipedia.alpha" with clear state COMPLETED
+21:08:02.607 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Continue" RUNNING
+21:08:04.014 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Continue, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/fragment_onboarding_forward_button, clickable=true, bounds=[825,2211][1080,2337], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.Button}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=825, y=2211, width=255, height=126))
+21:08:05.134 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:08:05.136 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (952, 2274) using hierarchy based logic for wait
+21:08:05.136 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:08:05.136 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:08:06.706 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:08:06.706 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Continue" COMPLETED
+21:08:06.706 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "New ways to explore" is visible RUNNING
+21:08:06.820 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "New ways to explore" is visible COMPLETED
+21:08:06.821 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Continue" RUNNING
+21:08:06.949 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Continue, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/fragment_onboarding_forward_button, clickable=true, bounds=[825,2211][1080,2337], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.Button}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=825, y=2211, width=255, height=126))
+21:08:08.148 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:08:08.148 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (952, 2274) using hierarchy based logic for wait
+21:08:08.149 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:08:08.149 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:08:09.520 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:08:09.520 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Continue" COMPLETED
+21:08:09.520 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Reading lists with sync" is visible RUNNING
+21:08:09.641 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Reading lists with sync" is visible COMPLETED
+21:08:09.641 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that id: imageViewCentered is visible RUNNING
+21:08:09.718 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that id: imageViewCentered is visible COMPLETED
+21:08:09.719 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Continue" RUNNING
+21:08:09.783 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Continue, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/fragment_onboarding_forward_button, clickable=true, bounds=[825,2211][1080,2337], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.Button}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=825, y=2211, width=255, height=126))
+21:08:10.943 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:08:10.943 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (952, 2274) using hierarchy based logic for wait
+21:08:10.943 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:08:10.944 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:08:12.277 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:08:12.277 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Continue" COMPLETED
+21:08:12.277 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that id: imageViewCentered is visible RUNNING
+21:08:12.384 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that id: imageViewCentered is visible COMPLETED
+21:08:12.385 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Data & Privacy" is visible RUNNING
+21:08:12.465 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Data & Privacy" is visible COMPLETED
+21:08:12.465 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Get started" RUNNING
+21:08:12.568 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Get started, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/fragment_onboarding_done_button, clickable=true, bounds=[780,2211][1080,2337], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.Button}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=780, y=2211, width=300, height=126))
+21:08:13.767 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:08:13.767 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (930, 2274) using hierarchy based logic for wait
+21:08:13.767 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:08:13.767 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:08:15.539 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:08:15.540 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Get started" COMPLETED
+21:08:15.540 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that id: main_toolbar_wordmark is visible RUNNING
+21:08:15.649 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that id: main_toolbar_wordmark is visible COMPLETED
+21:08:15.651 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Search Wikipedia", Index: 1 is visible RUNNING
+21:08:15.814 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Search Wikipedia", Index: 1 is visible COMPLETED

@@ -1,0 +1,143 @@
+21:26:30.343 [ INFO] MAESTRO.logSystemInfo: ---- System Info ----
+21:26:30.346 [ INFO] MAESTRO.logSystemInfo: Maestro Version: 1.39.13
+21:26:30.347 [ INFO] MAESTRO.logSystemInfo: CI: Undefined
+21:26:30.347 [ INFO] MAESTRO.logSystemInfo: OS Name: Linux
+21:26:30.347 [ INFO] MAESTRO.logSystemInfo: OS Version: 5.16.12-200.fc35.x86_64
+21:26:30.347 [ INFO] MAESTRO.logSystemInfo: Architecture: amd64
+21:26:30.347 [ INFO] MAESTRO.logSystemInfo: Java Version: 11
+21:26:30.350 [ INFO] MAESTRO.logSystemInfo: Xcode Version: null
+21:26:30.351 [ INFO] MAESTRO.logSystemInfo: Flutter Version: Undefined
+21:26:30.352 [ INFO] MAESTRO.logSystemInfo: Flutter Channel: Undefined
+21:26:30.352 [ INFO] MAESTRO.logSystemInfo: ---------------------
+21:26:30.957 [DEBUG] io.micrometer.common.util.internal.logging.InternalLoggerFactory.newDefaultFactory: Using SLF4J as the default logging framework
+21:26:31.244 [ INFO] maestro.cli.command.TestCommand.runShardSuite: [shard 1] Selected device 1C031FDEE006DQ using port 38380
+21:26:33.494 [ INFO] maestro.Maestro.invoke: Getting device info
+21:26:33.782 [ INFO] maestro.Maestro.invoke: Got device info: DeviceInfo(platform=ANDROID, widthPixels=1440, heightPixels=3120, widthGrid=1440, heightGrid=3120)
+21:26:33.902 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Define variables RUNNING
+21:26:33.908 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Define variables COMPLETED
+21:26:33.908 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration RUNNING
+21:26:33.908 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration COMPLETED
+21:26:33.909 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Launch app "org.wikipedia.alpha" with clear state RUNNING
+21:26:33.909 [ INFO] maestro.Maestro.clearAppState: Clearing app state org.wikipedia.alpha
+21:26:35.444 [ INFO] maestro.Maestro.launchApp: Launching app org.wikipedia.alpha
+21:26:35.611 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Launch app "org.wikipedia.alpha" with clear state COMPLETED
+21:26:35.611 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run subflows/skip-onboarding.yaml RUNNING
+21:26:35.612 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration RUNNING
+21:26:35.612 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration COMPLETED
+21:26:35.612 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Skip" is visible RUNNING
+21:26:36.491 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Skip" RUNNING
+21:26:37.063 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Skip, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/fragment_onboarding_skip_button, clickable=true, bounds=[0,2896][222,3064], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.Button}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=0, y=2896, width=222, height=168))
+21:26:38.358 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:26:38.359 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (111, 2980) using hierarchy based logic for wait
+21:26:38.359 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:26:38.360 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:26:40.463 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:26:40.463 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Skip" COMPLETED
+21:26:40.463 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Skip" is visible COMPLETED
+21:26:40.463 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Got it" is visible RUNNING
+21:26:40.623 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Got it" RUNNING
+21:26:40.797 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Got it, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/view_announcement_action_negative, clickable=true, bounds=[524,1690][775,1858], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.Button}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=524, y=1690, width=251, height=168))
+21:26:42.099 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:26:42.100 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (649, 1774) using hierarchy based logic for wait
+21:26:42.100 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:26:42.100 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:26:43.959 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:26:43.959 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Got it" COMPLETED
+21:26:43.959 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Got it" is visible COMPLETED
+21:26:43.959 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run subflows/skip-onboarding.yaml COMPLETED
+21:26:43.959 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on id: search_container RUNNING
+21:26:44.086 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/search_container, clickable=true, bounds=[56,380][1384,548], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=androidx.cardview.widget.CardView}, children=[TreeNode(attributes={text=, accessibilityText=Search Wikipedia, hintText=, ignoreBoundsFiltering=false, resource-id=, clickable=false, bounds=[56,380][224,548], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.ImageView}, children=[], clickable=false, enabled=true, focused=false, checked=false, selected=false), TreeNode(attributes={text=Search Wikipedia, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=, clickable=false, bounds=[224,431][1216,497], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.TextView}, children=[], clickable=false, enabled=true, focused=false, checked=false, selected=false), TreeNode(attributes={text=, accessibilityText=Voice input search, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/voice_search_button, clickable=true, bounds=[1216,380][1384,548], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.ImageView}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false)], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=56, y=380, width=1328, height=168))
+21:26:45.292 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:26:45.293 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (720, 464) using hierarchy based logic for wait
+21:26:45.293 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:26:45.293 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:26:48.373 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:26:48.373 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on id: search_container COMPLETED
+21:26:48.374 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Search Wikipedia" RUNNING
+21:26:48.672 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Search Wikipedia, accessibilityText=, hintText=Search Wikipedia, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/search_src_text, clickable=true, bounds=[224,194][1223,318], enabled=true, focused=true, checked=false, scrollable=false, selected=false, class=android.widget.AutoCompleteTextView}, children=[], clickable=true, enabled=true, focused=true, checked=false, selected=false), bounds=Bounds(x=224, y=194, width=999, height=124))
+21:26:49.964 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:26:49.964 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (723, 256) using hierarchy based logic for wait
+21:26:49.964 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:26:49.964 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:26:51.432 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:26:51.432 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:26:52.670 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by screenshot (d=0.005464575). Proceed.
+21:26:52.670 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Search Wikipedia" COMPLETED
+21:26:52.670 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Input text Hello World RUNNING
+21:26:52.671 [ INFO] maestro.Maestro.inputText: Inputting text: Hello World
+21:26:55.563 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Input text Hello World COMPLETED
+21:26:55.564 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on ""Hello, World!" program" RUNNING
+21:26:55.824 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text="Hello, World!" program, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/page_list_item_title, clickable=false, bounds=[56,733][1328,809], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.TextView}, children=[], clickable=false, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=56, y=733, width=1272, height=76))
+21:26:57.271 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:26:57.272 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (692, 771) using hierarchy based logic for wait
+21:26:57.272 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:26:57.272 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:26:59.706 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:26:59.706 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on ""Hello, World!" program" COMPLETED
+21:26:59.706 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run subflows/skip-popups.yaml RUNNING
+21:26:59.706 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration RUNNING
+21:26:59.707 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Apply configuration COMPLETED
+21:26:59.707 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Play today's game" is visible RUNNING
+21:26:59.766 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Close" RUNNING
+21:26:59.872 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=, accessibilityText=Close, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/closeButton, clickable=true, bounds=[1137,987][1305,1155], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.ImageView}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=1137, y=987, width=168, height=168))
+21:27:01.394 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:27:01.395 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (1221, 1071) using hierarchy based logic for wait
+21:27:01.395 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:27:01.395 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:27:05.674 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:27:05.674 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Close" COMPLETED
+21:27:05.674 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Play today's game" is visible COMPLETED
+21:27:05.674 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Customize your toolbar" is visible RUNNING
+21:27:06.596 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Got it" RUNNING
+21:27:07.552 [ INFO] maestro.Maestro.tap-BUbHBYE: Tapping on element:  UiElement(treeNode=TreeNode(attributes={text=Got it, accessibilityText=, hintText=, ignoreBoundsFiltering=false, resource-id=org.wikipedia.alpha:id/buttonView, clickable=true, bounds=[766,535][1042,703], enabled=true, focused=false, checked=false, scrollable=false, selected=false, class=android.widget.Button}, children=[], clickable=true, enabled=true, focused=false, checked=false, selected=false), bounds=Bounds(x=766, y=535, width=276, height=168))
+21:27:09.392 [ INFO] maestro.Maestro.tap-BUbHBYE: Refreshed element
+21:27:09.393 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Tapping at (904, 619) using hierarchy based logic for wait
+21:27:09.393 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to byte array
+21:27:09.393 [TRACE] maestro.utils.ScreenshotUtils.takeScreenshot: Taking screenshot to output sink
+21:27:11.962 [ INFO] maestro.Maestro.hierarchyBasedTap-hbl3e4M: Something have changed in the UI judging by view hierarchy. Proceed.
+21:27:11.963 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Tap on "Got it" COMPLETED
+21:27:11.963 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run flow when "Customize your toolbar" is visible COMPLETED
+21:27:11.963 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Run subflows/skip-popups.yaml COMPLETED
+21:27:11.963 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that ""Hello, World!" program" is visible RUNNING
+21:27:12.609 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that ""Hello, World!" program" is visible COMPLETED
+21:27:12.610 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Traditional first example of a computer programming language" is visible RUNNING
+21:27:13.346 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that "Traditional first example of a computer programming language" is visible COMPLETED
+21:27:13.346 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Scrolling DOWN until id: Variations is visible. RUNNING
+21:27:14.202 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Scrolling try count: 0, DeviceWidth: 1440, DeviceWidth: 3120
+21:27:14.202 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Element bounds: Bounds(x=56, y=3065, width=1106, height=0)
+21:27:14.202 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Visibility Percent: 0
+21:27:14.202 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Command centerElement: ScrollUntilVisibleCommand(selector=ElementSelector(textRegex=null, idRegex=Variations, size=null, below=null, above=null, leftOf=null, rightOf=null, containsChild=null, containsDescendants=null, traits=null, index=null, enabled=null, optional=false, selected=null, checked=null, focused=null, childOf=null), direction=DOWN, scrollDuration=601, visibilityPercentage=100, timeout=50000, waitToSettleTimeoutMs=null, centerElement=true, label=null, optional=false).centerElement
+21:27:14.202 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: visibilityPercentageNormalized: 1.0
+21:27:14.210 [ INFO] maestro.Maestro.swipeFromCenter: Swiping UP from center
+21:27:18.062 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Scrolling try count: 0, DeviceWidth: 1440, DeviceWidth: 3120
+21:27:18.062 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Element bounds: Bounds(x=56, y=3065, width=1106, height=0)
+21:27:18.062 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Visibility Percent: 0
+21:27:18.062 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Command centerElement: ScrollUntilVisibleCommand(selector=ElementSelector(textRegex=null, idRegex=Variations, size=null, below=null, above=null, leftOf=null, rightOf=null, containsChild=null, containsDescendants=null, traits=null, index=null, enabled=null, optional=false, selected=null, checked=null, focused=null, childOf=null), direction=DOWN, scrollDuration=601, visibilityPercentage=100, timeout=50000, waitToSettleTimeoutMs=null, centerElement=true, label=null, optional=false).centerElement
+21:27:18.062 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: visibilityPercentageNormalized: 1.0
+21:27:18.075 [ INFO] maestro.Maestro.swipeFromCenter: Swiping UP from center
+21:27:22.152 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Scrolling try count: 0, DeviceWidth: 1440, DeviceWidth: 3120
+21:27:22.152 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Element bounds: Bounds(x=56, y=3065, width=1106, height=0)
+21:27:22.152 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Visibility Percent: 0
+21:27:22.152 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Command centerElement: ScrollUntilVisibleCommand(selector=ElementSelector(textRegex=null, idRegex=Variations, size=null, below=null, above=null, leftOf=null, rightOf=null, containsChild=null, containsDescendants=null, traits=null, index=null, enabled=null, optional=false, selected=null, checked=null, focused=null, childOf=null), direction=DOWN, scrollDuration=601, visibilityPercentage=100, timeout=50000, waitToSettleTimeoutMs=null, centerElement=true, label=null, optional=false).centerElement
+21:27:22.152 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: visibilityPercentageNormalized: 1.0
+21:27:22.171 [ INFO] maestro.Maestro.swipeFromCenter: Swiping UP from center
+21:27:26.254 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Scrolling try count: 0, DeviceWidth: 1440, DeviceWidth: 3120
+21:27:26.254 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Element bounds: Bounds(x=56, y=3065, width=1106, height=0)
+21:27:26.255 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Visibility Percent: 0
+21:27:26.255 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Command centerElement: ScrollUntilVisibleCommand(selector=ElementSelector(textRegex=null, idRegex=Variations, size=null, below=null, above=null, leftOf=null, rightOf=null, containsChild=null, containsDescendants=null, traits=null, index=null, enabled=null, optional=false, selected=null, checked=null, focused=null, childOf=null), direction=DOWN, scrollDuration=601, visibilityPercentage=100, timeout=50000, waitToSettleTimeoutMs=null, centerElement=true, label=null, optional=false).centerElement
+21:27:26.255 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: visibilityPercentageNormalized: 1.0
+21:27:26.272 [ INFO] maestro.Maestro.swipeFromCenter: Swiping UP from center
+21:27:30.047 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Scrolling try count: 0, DeviceWidth: 1440, DeviceWidth: 3120
+21:27:30.048 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Element bounds: Bounds(x=56, y=2577, width=1106, height=196)
+21:27:30.048 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Visibility Percent: 0
+21:27:30.048 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Command centerElement: ScrollUntilVisibleCommand(selector=ElementSelector(textRegex=null, idRegex=Variations, size=null, below=null, above=null, leftOf=null, rightOf=null, containsChild=null, containsDescendants=null, traits=null, index=null, enabled=null, optional=false, selected=null, checked=null, focused=null, childOf=null), direction=DOWN, scrollDuration=601, visibilityPercentage=100, timeout=50000, waitToSettleTimeoutMs=null, centerElement=true, label=null, optional=false).centerElement
+21:27:30.048 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: visibilityPercentageNormalized: 1.0
+21:27:30.062 [ INFO] maestro.Maestro.swipeFromCenter: Swiping UP from center
+21:27:33.901 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Scrolling try count: 1, DeviceWidth: 1440, DeviceWidth: 3120
+21:27:33.901 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Element bounds: Bounds(x=56, y=1083, width=1106, height=196)
+21:27:33.901 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Visibility Percent: 1
+21:27:33.901 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: Command centerElement: ScrollUntilVisibleCommand(selector=ElementSelector(textRegex=null, idRegex=Variations, size=null, below=null, above=null, leftOf=null, rightOf=null, containsChild=null, containsDescendants=null, traits=null, index=null, enabled=null, optional=false, selected=null, checked=null, focused=null, childOf=null), direction=DOWN, scrollDuration=601, visibilityPercentage=100, timeout=50000, waitToSettleTimeoutMs=null, centerElement=true, label=null, optional=false).centerElement
+21:27:33.901 [ INFO] maestro.orchestra.Orchestra.scrollUntilVisible: visibilityPercentageNormalized: 1.0
+21:27:33.901 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Scrolling DOWN until id: Variations is visible. COMPLETED
+21:27:33.901 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that ".*"Hello, World!" programs vary in complexity between different languages.*particularly.*" is visible RUNNING
+21:27:34.641 [ INFO] maestro.cli.runner.TestSuiteInteractor.invoke: Assert that ".*"Hello, World!" programs vary in complexity between different languages.*particularly.*" is visible COMPLETED
