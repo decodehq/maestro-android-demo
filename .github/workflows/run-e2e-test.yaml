@@ -24,15 +24,19 @@ on:
         default: true
 
 env:
-  BSTACK_DEVICES: "Google Pixel 7-13.0"
-  # Optional project / build naming
+  BSTACK_DEVICES: "Google Pixel 7-13.0, Google Pixel 8-14.0, Google Pixel 6 Pro-12.0, Samsung Galaxy S22-12.0, OnePlus 11R-13.0"
   BSTACK_PROJECT: "Maestro E2E"
   BSTACK_BUILD_NAME: "E2E Run - ${{ github.ref_name }} @ ${{ github.run_number }}"
+
+permissions:
+  contents: write
 
 jobs:
   maestro-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    outputs:
+      build_id: ${{ steps.start_build.outputs.build_id }}
 
     steps:
       - name: Checkout
@@ -47,23 +51,38 @@ jobs:
       - name: Prepare suite zip when suite ID is not provided
         id: zip_suite
         if: ${{ inputs.browserstack_suite_id == '' }}
+        shell: bash
         run: |
           set -euo pipefail
           ZIP_NAME="maestro_flows.zip"
+          WRAP_DIR="maestro_flows"
           rm -f "$ZIP_NAME"
-
-          # Create a zip of the current directory excluding:
-          # - .github/**, .maestro/**, LICENSE/LICENCE, README.md
-          # Notes:
-          #   - Both single and double-star patterns are included for portability.
-          #   - Files will be at the root of the archive (no wrapper folder needed).
-          zip -qr "$ZIP_NAME" . \
-            -x ".github/*" ".github/**" \
-               ".maestro/*" ".maestro/**" \
-               "LICENSE" "LICENCE" "README.md"
-
+          rm -rf "$WRAP_DIR"
+          mkdir -p "$WRAP_DIR"
+          rsync -a --prune-empty-dirs \
+            --include='*/' \
+            --include='*.yaml' --include='*.yml' \
+            --include='*.js' \
+            --include='*.png' --include='*.jpg' --include='*.jpeg' --include='*.gif' \
+            --include='*.mp4' \
+            --exclude='.github/***' \
+            --exclude='.maestro/***' \
+            --exclude='LICENSE' --exclude='LICENCE' --exclude='README.md' \
+            --exclude='*' \
+            ./ "$WRAP_DIR/"
+          echo "== Suite contents =="
+          find "$WRAP_DIR" -type f | sed "s|^|  |" | sort
+          zip -qr "$ZIP_NAME" "$WRAP_DIR"
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
-        shell: bash
+
+      - name: Upload suite ZIP artifact
+        if: ${{ inputs.browserstack_suite_id == '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: maestro_flows_zip
+          path: ${{ steps.zip_suite.outputs.zip_path }}
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload suite zip to BrowserStack (if needed)
         id: upload_suite
@@ -73,10 +92,12 @@ jobs:
           BS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
         run: |
           set -euo pipefail
+          RAW_ID="${{ github.repository }}-${{ github.ref_name }}-${{ github.run_id }}"
+          CUSTOM_ID="$(echo "$RAW_ID" | tr '[:space:]' '_' | sed 's/[^A-Za-z0-9._-]/_/g')"
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" \
             -F "file=@${{ steps.zip_suite.outputs.zip_path }}" \
-            -F "custom_id=${{ github.repository }}-${{ github.run_id }}")
+            -F "custom_id=$CUSTOM_ID")
           echo "$RESP"
           SUITE_URL=$(echo "$RESP" | jq -r '.test_suite_url')
           SUITE_ID=$(echo "$RESP" | jq -r '.test_suite_id')
@@ -95,6 +116,28 @@ jobs:
           fi
         shell: bash
 
+      - name: Build tests whitelist (root *.yml/*.yaml only)
+        id: whitelist
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob nocaseglob
+          ROOT_TESTS=( *.yml *.yaml )
+          shopt -u nocaseglob
+          echo "Selected tests:"
+          for f in "${ROOT_TESTS[@]}"; do echo " - $f"; done
+          if ((${#ROOT_TESTS[@]} == 0)); then
+            echo "No root-level tests (*.yml/*.yaml) found." >&2
+            exit 1
+          fi
+          {
+            echo 'tests<<EOF'
+            for f in "${ROOT_TESTS[@]}"; do echo "$f"; done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          printf -v JSON '%s' "$(printf '"%s",' "${ROOT_TESTS[@]}" | sed 's/,$//')"
+          echo "tests_json=[${JSON}]" >> "$GITHUB_OUTPUT"
+
       - name: Start BrowserStack Maestro build (Android)
         id: start_build
         env:
@@ -105,34 +148,34 @@ jobs:
           DEVICES: ${{ env.BSTACK_DEVICES }}
           PROJECT: ${{ env.BSTACK_PROJECT }}
           BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
+          TESTS_JSON: ${{ steps.whitelist.outputs.tests_json }}
         run: |
           set -euo pipefail
-          # Build the JSON payload (devices is an array)
-          IFS=',' read -r -a DEV_ARR <<< "$DEVICES"
-          DEV_JSON=$(printf '"%s",' "${DEV_ARR[@]}" | sed 's/,$//')
-
           PAYLOAD=$(jq -n \
-            --arg app "$APP_URL" \
-            --arg suite "$SUITE_URL" \
+            --arg app     "$APP_URL" \
+            --arg suite   "$SUITE_URL" \
             --arg project "$PROJECT" \
-            --arg build "$BUILDNAME" \
-            --argjson devices "[$DEV_JSON]" \
-            '{app: $app, testSuite: $suite, project: $project, buildName: $build, devices: $devices }')
-
-          echo "Request:"
-          echo "$PAYLOAD" | jq -C .
-
+            --arg build   "$BUILDNAME" \
+            --arg devices "$DEVICES" \
+            --argjson tests "${TESTS_JSON:-[]}" \
+            '{
+               app: $app,
+               testSuite: $suite,
+               project: $project,
+               buildName: $build,
+               devices: ($devices | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))),
+               tests: $tests
+             }')
+          echo "Request payload:"; echo "$PAYLOAD" | jq -C .
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -H "Content-Type: application/json" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
             -d "$PAYLOAD")
-
-          echo "Response:"
-          echo "$RESP" | jq -C .
-
+          echo "Response:"; echo "$RESP" | jq -C .
           BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
-          test "$BUILD_ID" != "null"
+          test "$BUILD_ID" != "null" -a -n "$BUILD_ID"
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          echo "BROWSERSTACK_BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
         shell: bash
 
       - name: Wait for build to finish
@@ -143,7 +186,7 @@ jobs:
           BUILD_ID: ${{ steps.start_build.outputs.build_id }}
         run: |
           set -euo pipefail
-          ATTEMPTS=720   # up to ~2 hours (every 10s)
+          ATTEMPTS=720
           SLEEP=10
           STATUS="running"
           mkdir -p artifacts
@@ -153,12 +196,151 @@ jobs:
             STATUS=$(echo "$RESP" | jq -r '.status')
             echo "[$(date -u +%H:%M:%S)] Build $BUILD_ID status: $STATUS"
             echo "$RESP" > "artifacts/build-$BUILD_ID.json"
-
-            if [ "$STATUS" = "passed" ] || [ "$STATUS" = "failed" ] || [ "$STATUS" = "error" ] || [ "$STATUS" = "stopped" ] || [ "$STATUS" = "timedout" ]; then
+            if [[ "$STATUS" =~ ^(passed|failed|error|stopped|timedout)$ ]]; then
               break
             fi
             sleep $SLEEP
           done
-
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
         shell: bash
+
+      - name: Upload BrowserStack build JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: browserstack-build
+          path: artifacts/build-*.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  generate-allure-results:
+    if: ${{ inputs.generate_allure }}
+    needs: [maestro-e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate Allure results (and upload artifact)
+        uses: ./.github/actions/generate-allure-files
+        with:
+          build_id: ${{ needs.maestro-e2e.outputs.build_id }}
+          suite: ${{ env.BSTACK_PROJECT }}
+          out_dir: allure-results
+          username: ${{ secrets.BROWSERSTACK_USERNAME }}
+          access_key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+
+      # ⛔️ No extra upload step here — the composite already uploaded
+      # an artifact named: allure-results-${build_id}
+
+  publish-allure-to-pages:
+    if: ${{ inputs.generate_allure }}
+    needs: [maestro-e2e, generate-allure-results]
+    runs-on: ubuntu-latest
+    outputs:
+      allure_url:   ${{ steps.publish.outputs.allure_url }}
+      base_url:     ${{ steps.publish.outputs.base_url }}
+      report_path:  ${{ steps.publish.outputs.report_path }}
+      passed:       ${{ steps.publish.outputs.passed }}
+      failed:       ${{ steps.publish.outputs.failed }}
+      broken:       ${{ steps.publish.outputs.broken }}
+      skipped:      ${{ steps.publish.outputs.skipped }}
+      total:        ${{ steps.publish.outputs.total }}
+      duration_ms:  ${{ steps.publish.outputs.duration_ms }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Allure results ZIP
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
+          path: .
+
+      - name: Publish Allure HTML to Pages branch (non-overwrite)
+        id: publish
+        uses: ./.github/actions/publish-allure-to-pages
+        with:
+          results_zip: allure-results-${{ needs.maestro-e2e.outputs.build_id }}.zip
+          build_id: ${{ needs.maestro-e2e.outputs.build_id }}
+          pages_branch: allure-report
+          base_path: reports
+          folder_prefix: "run-"
+
+      # Persist the URL to this job's environment (handy for adjacent steps in this job)
+      - name: Export ALLURE_REPORT_URL for this job
+        shell: bash
+        run: echo "ALLURE_REPORT_URL=${{ steps.publish.outputs.allure_url }}" >> "$GITHUB_ENV"
+
+  notify:
+    # Run even if something failed, but only if we intended to generate Allure
+    if: ${{ always() && inputs.generate_allure }}
+    needs: [maestro-e2e, publish-allure-to-pages]
+    runs-on: ubuntu-latest
+    env:
+      ALLURE_URL:    ${{ needs.publish-allure-to-pages.outputs.allure_url }}
+      PASSED:        ${{ needs.publish-allure-to-pages.outputs.passed }}
+      FAILED:        ${{ needs.publish-allure-to-pages.outputs.failed }}
+      BROKEN:        ${{ needs.publish-allure-to-pages.outputs.broken }}
+      SKIPPED:       ${{ needs.publish-allure-to-pages.outputs.skipped }}
+      TOTAL:         ${{ needs.publish-allure-to-pages.outputs.total }}
+      DURATION_MS:   ${{ needs.publish-allure-to-pages.outputs.duration_ms }}
+      RUN_URL:       ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      BRANCH:        ${{ github.ref_name }}
+    steps:
+      - name: Send Slack summary (Incoming Webhook)
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Decide headline/status based on failures
+          STATUS="PASSED"
+          ICON=":white_check_mark:"
+          if [ "${FAILED}" != "0" ] || [ "${BROKEN}" != "0" ]; then
+            STATUS="FAILED"
+            ICON=":x:"
+          fi
+
+          # Humanize duration (rough)
+          dur_ms=${DURATION_MS:-0}
+          dur_s=$(( dur_ms / 1000 ))
+          h=$(( dur_s / 3600 ))
+          m=$(( (dur_s % 3600) / 60 ))
+          s=$(( dur_s % 60 ))
+          DURATION_FMT=$(printf "%d:%02d:%02d" "$h" "$m" "$s")
+
+          # Build Slack payload with blocks
+          payload=$(jq -n \
+            --arg icon    "$ICON" \
+            --arg status  "$STATUS" \
+            --arg branch  "$BRANCH" \
+            --arg passed  "$PASSED" \
+            --arg failed  "$FAILED" \
+            --arg broken  "$BROKEN" \
+            --arg skipped "$SKIPPED" \
+            --arg total   "$TOTAL" \
+            --arg dur     "$DURATION_FMT" \
+            --arg allure  "$ALLURE_URL" \
+            --arg runurl  "$RUN_URL" \
+            '{
+              blocks: [
+                { type: "header", text: { type: "plain_text", text: "\($icon) E2E tests \($status) on branch \($branch)" } },
+                { type: "section", fields: [
+                    { type: "mrkdwn", text: "*Passed:*\n\($passed)" },
+                    { type: "mrkdwn", text: "*Failed:*\n\($failed)" },
+                    { type: "mrkdwn", text: "*Broken:*\n\($broken)" },
+                    { type: "mrkdwn", text: "*Skipped:*\n\($skipped)" },
+                    { type: "mrkdwn", text: "*Total:*\n\($total)" },
+                    { type: "mrkdwn", text: "*Duration:*\n\($dur)" }
+                  ]
+                },
+                { type: "divider" },
+                { type: "section", text: { type: "mrkdwn", text: "*Useful links:*\n• <\($allure)|Allure Report>\n• <\($runurl)|GitHub Run>" } }
+              ]
+            }')
+
+          curl -sSf -X POST -H 'Content-type: application/json' \
+            --data "$payload" \
+            "$SLACK_WEBHOOK_URL"

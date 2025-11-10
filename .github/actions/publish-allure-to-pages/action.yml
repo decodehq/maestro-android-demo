@@ -1,0 +1,195 @@
+name: "Publish Allure to Pages (non-overwrite)"
+description: "Build Allure HTML from results and push to a Pages branch under a unique subfolder, preserving history."
+author: "you"
+
+inputs:
+  results_zip:
+    description: "Path to a ZIP of allure-results (relative to repo root or absolute)"
+    required: true
+  build_id:
+    description: "Folder name to use on the Pages branch (e.g. a build/run id)"
+    required: true
+  pages_branch:
+    description: "Branch that GitHub Pages serves from"
+    required: false
+    default: "allure-report"
+  base_path:
+    description: "Base folder on the Pages branch where reports live"
+    required: false
+    default: "reports"
+  folder_prefix:
+    description: "Optional folder prefix (e.g. run-). Final path: base_path/<prefix><build_id>/"
+    required: false
+    default: ""
+
+outputs:
+  allure_url:
+    description: "Public URL to the Allure report's index.html"
+    value: ${{ steps.set-outputs.outputs.allure_url }}
+  base_url:
+    description: "Base Pages URL for this repo"
+    value: ${{ steps.set-outputs.outputs.base_url }}
+  report_path:
+    description: "reports/<prefix><build_id>/"
+    value: ${{ steps.set-outputs.outputs.report_path }}
+  passed:
+    description: "Passed tests"
+    value: ${{ steps.set-outputs.outputs.passed }}
+  failed:
+    description: "Failed tests"
+    value: ${{ steps.set-outputs.outputs.failed }}
+  broken:
+    description: "Broken tests"
+    value: ${{ steps.set-outputs.outputs.broken }}
+  skipped:
+    description: "Skipped tests"
+    value: ${{ steps.set-outputs.outputs.skipped }}
+  total:
+    description: "Total tests"
+    value: ${{ steps.set-outputs.outputs.total }}
+  duration_ms:
+    description: "Total duration (ms)"
+    value: ${{ steps.set-outputs.outputs.duration_ms }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Verify repo checkout
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -d .git || { echo "This action requires actions/checkout to have run first."; exit 1; }
+
+    - name: Set up Node (for Allure CLI)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Allure CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm i -g allure-commandline
+        echo "$(npm root -g)/allure-commandline/bin" >> "$GITHUB_PATH"
+        command -v jq >/dev/null 2>&1 || sudo apt-get update && sudo apt-get install -y jq
+        allure --version || true
+
+    - name: Unzip allure-results
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p _work/allure-results
+        unzip -q "${{ inputs.results_zip }}" -d _work/allure-results
+        test -d _work/allure-results
+
+    - name: Generate Allure HTML
+      shell: bash
+      run: |
+        set -euo pipefail
+        allure generate _work/allure-results -o _work/allure-report --clean
+        test -f _work/allure-report/index.html
+
+    # Publish without touching the current worktree (avoids post-action errors)
+    - name: Publish to Pages via worktree (preserve history)
+      id: publish
+      shell: bash
+      env:
+        BRANCH: ${{ inputs.pages_branch }}
+        BASE:   ${{ inputs.base_path }}
+        BID:    ${{ inputs.build_id }}
+        PREFIX: ${{ inputs.folder_prefix }}
+      run: |
+        set -euo pipefail
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        WT="_pages_worktree"
+        rm -rf "$WT"
+
+        # Fetch remote ref if exists
+        git fetch --no-tags --depth=1 origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+
+        if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+          git worktree add --force -B "$BRANCH" "$WT" "origin/${BRANCH}"
+        else
+          git worktree add --detach "$WT"
+          ( cd "$WT" && git checkout --orphan "$BRANCH" && find . -mindepth 1 -maxdepth 1 -not -name ".git" -exec rm -rf {} + )
+        fi
+
+        DEST="${BASE}/${PREFIX}${BID}"
+        ( cd "$WT"
+          mkdir -p "$DEST"
+          if command -v rsync >/dev/null 2>&1; then
+            rsync -a --delete "../_work/allure-report/" "$DEST/"
+          else
+            rm -rf "$DEST"/* || true
+            cp -a ../_work/allure-report/. "$DEST/"
+          fi
+          touch .nojekyll
+          git add -A
+          git commit -m "Publish Allure report for build ${BID} at ${DEST}" || echo "No changes to commit."
+          git push -u origin "$BRANCH"
+        )
+
+        # Parse stats from the generated report
+        SUMMARY_JSON="_work/allure-report/widgets/summary.json"
+        PASSED=$(jq -r '.statistic.passed // 0' "$SUMMARY_JSON")
+        FAILED=$(jq -r '.statistic.failed // 0' "$SUMMARY_JSON")
+        BROKEN=$(jq -r '.statistic.broken // 0' "$SUMMARY_JSON")
+        SKIPPED=$(jq -r '.statistic.skipped // 0' "$SUMMARY_JSON")
+        TOTAL=$(jq -r '.statistic.total  // 0' "$SUMMARY_JSON")
+        DURATION=$(jq -r '.time.duration  // 0' "$SUMMARY_JSON")
+
+        # Construct public URL
+        OWNER=$(echo "$GITHUB_REPOSITORY" | cut -d/ -f1)
+        REPO=$(echo "$GITHUB_REPOSITORY" | cut -d/ -f2)
+        BASE_URL="https://${OWNER}.github.io/${REPO}"
+        REPORT_PATH="${DEST%/}/"
+        ALLURE_URL="${BASE_URL}/${REPORT_PATH}index.html"
+
+        # Single annotation + job summary
+        echo "::notice title=Allure Report::${ALLURE_URL}"
+        {
+          echo "### Allure Report"
+          echo ""
+          echo "[Open report](${ALLURE_URL})"
+          echo ""
+          echo "| total | passed | failed | broken | skipped | duration (ms) |"
+          echo "|------:|------:|------:|------:|-------:|-------------:|"
+          echo "| ${TOTAL} | ${PASSED} | ${FAILED} | ${BROKEN} | ${SKIPPED} | ${DURATION} |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        # Also drop env var for downstream steps inside this job (callers should export from outputs)
+        echo "ALLURE_REPORT_URL=${ALLURE_URL}" >> "$GITHUB_ENV"
+
+        # Surface values as *this step's* outputs
+        echo "allure_url=${ALLURE_URL}"   >> "$GITHUB_OUTPUT"
+        echo "base_url=${BASE_URL}"       >> "$GITHUB_OUTPUT"
+        echo "report_path=${REPORT_PATH}" >> "$GITHUB_OUTPUT"
+        echo "passed=${PASSED}"           >> "$GITHUB_OUTPUT"
+        echo "failed=${FAILED}"           >> "$GITHUB_OUTPUT"
+        echo "broken=${BROKEN}"           >> "$GITHUB_OUTPUT"
+        echo "skipped=${SKIPPED}"         >> "$GITHUB_OUTPUT"
+        echo "total=${TOTAL}"             >> "$GITHUB_OUTPUT"
+        echo "duration_ms=${DURATION}"    >> "$GITHUB_OUTPUT"
+
+        # Clean worktree registration (dir already created outside repo root)
+        git worktree remove "$WT" --force || true
+
+    - name: Set composite outputs
+      id: set-outputs
+      shell: bash
+      run: |
+        # Just forward from the 'publish' step so the composite can expose them
+        cat <<EOF >> "$GITHUB_OUTPUT"
+        allure_url=${{ steps.publish.outputs.allure_url }}
+        base_url=${{ steps.publish.outputs.base_url }}
+        report_path=${{ steps.publish.outputs.report_path }}
+        passed=${{ steps.publish.outputs.passed }}
+        failed=${{ steps.publish.outputs.failed }}
+        broken=${{ steps.publish.outputs.broken }}
+        skipped=${{ steps.publish.outputs.skipped }}
+        total=${{ steps.publish.outputs.total }}
+        duration_ms=${{ steps.publish.outputs.duration_ms }}
+        EOF
