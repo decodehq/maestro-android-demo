@@ -240,12 +240,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     outputs:
-      results_zip: ${{ steps.zip_out.outputs.results_zip }}
+      artifact_name: ${{ steps.set.outputs.artifact_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Generate Allure results
+        id: gen
         uses: ./.github/actions/generate-allure-files
         with:
           build_id: ${{ needs.maestro-e2e.outputs.build_id }}
@@ -254,17 +255,11 @@ jobs:
           username: ${{ secrets.BROWSERSTACK_USERNAME }}
           access_key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
 
-      - name: Capture ZIP path for downstream job
-        id: zip_out
-        run: echo "results_zip=allure-results.zip" >> "$GITHUB_OUTPUT"
-
-      - name: Upload zipped Allure results
-        uses: actions/upload-artifact@v4
-        with:
-          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
-          path: allure-results.zip
-          if-no-files-found: error
-          retention-days: 14
+      # The composite action already uploaded the artifact with this name:
+      # "allure-results-${build_id}". Expose that name for downstream jobs.
+      - name: Set artifact name for downstream
+        id: set
+        run: echo "artifact_name=allure-results-${{ needs.maestro-e2e.outputs.build_id }}" >> "$GITHUB_OUTPUT"
 
   publish-allure-to-pages:
     if: ${{ inputs.generate_allure }}
@@ -277,15 +272,15 @@ jobs:
       - name: Download Allure results ZIP
         uses: actions/download-artifact@v4
         with:
-          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
+          name: ${{ needs.generate-allure-results.outputs.artifact_name }}
           path: .
 
       - name: Publish Allure HTML to Pages branch (non-overwrite)
         uses: ./.github/actions/publish-allure-to-pages
         with:
-          results_zip: allure-results.zip
+          results_zip: ${{ needs.generate-allure-results.outputs.artifact_name }}.zip
           build_id: ${{ needs.maestro-e2e.outputs.build_id }}
-          pages_branch: allure-report      # your chosen Pages branch
-          base_path: reports               # change if you want
+          pages_branch: allure-report
+          base_path: reports
           site_title: "Allure Reports"
           folder_prefix: "run-"
