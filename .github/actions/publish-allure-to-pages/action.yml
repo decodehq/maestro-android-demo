@@ -1,3 +1,4 @@
+# .github/actions/publish-allure-to-pages/action.yml
 name: "Publish Allure to Pages (non-overwrite)"
 description: "Build Allure HTML from results and push to a Pages branch under a unique subfolder, preserving history."
 author: "you"
@@ -17,10 +18,6 @@ inputs:
     description: "Base folder on the Pages branch where reports live"
     required: false
     default: "reports"
-  site_title:
-    description: "Unused here (we don’t generate index.html in this version)"
-    required: false
-    default: "Allure Reports"
   folder_prefix:
     description: "Optional folder prefix (e.g. run-). Final path: base_path/<prefix><build_id>/"
     required: false
@@ -29,7 +26,12 @@ inputs:
 runs:
   using: "composite"
   steps:
-    # Allure via npm is the most reliable on runners.
+    - name: Verify repo checkout
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -d .git || { echo "This action requires actions/checkout to have run first."; exit 1; }
+
     - name: Set up Node (for Allure CLI)
       uses: actions/setup-node@v4
       with:
@@ -58,7 +60,7 @@ runs:
         allure generate _work/allure-results -o _work/allure-report --clean
         test -f _work/allure-report/index.html
 
-    - name: Publish to Pages branch (preserve history, no index.html)
+    - name: Publish to Pages branch via worktree (preserve history)
       shell: bash
       env:
         BRANCH: ${{ inputs.pages_branch }}
@@ -68,31 +70,42 @@ runs:
       run: |
         set -euo pipefail
 
-        # Ensure we're inside a git worktree (requires actions/checkout before this action!)
         git config user.name  "github-actions[bot]"
         git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-        if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
-          git fetch origin "$BRANCH":"refs/remotes/origin/$BRANCH" --depth=1
-          git checkout -B "$BRANCH" "origin/$BRANCH"
+        WT="_pages_worktree"
+        rm -rf "$WT"
+
+        # Fetch remote tip of the target branch (if it exists)
+        git fetch --no-tags --depth=1 origin "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" || true
+
+        if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+          # Create a linked worktree at the remote branch tip
+          git worktree add --force -B "$BRANCH" "$WT" "origin/${BRANCH}"
         else
-          git checkout --orphan "$BRANCH"
-          # wipe the worktree except .git
-          find . -mindepth 1 -maxdepth 1 -not -name ".git" -exec rm -rf {} +
+          # Create a detached worktree and start an orphan branch there
+          git worktree add --detach "$WT"
+          ( cd "$WT" && git checkout --orphan "$BRANCH" && find . -mindepth 1 -maxdepth 1 -not -name ".git" -exec rm -rf {} + )
         fi
 
-        mkdir -p "$BASE"
-        DEST="$BASE/${PREFIX}${BID}"
-        mkdir -p "$DEST"
+        DEST="${BASE}/${PREFIX}${BID}"
 
-        # rsync is available on ubuntu-latest; fall back to cp if missing
-        if command -v rsync >/dev/null 2>&1; then
-          rsync -a --delete _work/allure-report/ "$DEST/"
-        else
-          rm -rf "$DEST"/*
-          cp -a _work/allure-report/. "$DEST/"
-        fi
+        (
+          cd "$WT"
+          mkdir -p "$DEST"
 
-        git add -A
-        git commit -m "Publish Allure report for build ${BID} at ${DEST}" || echo "No changes to commit."
-        git push origin "$BRANCH"
+          if command -v rsync >/dev/null 2>&1; then
+            rsync -a --delete "../_work/allure-report/" "$DEST/"
+          else
+            rm -rf "$DEST"/*
+            cp -a ../_work/allure-report/. "$DEST/"
+          fi
+
+          touch .nojekyll
+          git add -A
+          git commit -m "Publish Allure report for build ${BID} at ${DEST}" || echo "No changes to commit."
+          git push -u origin "$BRANCH"
+        )
+
+        # Deregister worktree (directory may remain for inspection if needed)
+        git worktree remove "$WT" --force || true
