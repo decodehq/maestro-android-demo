@@ -58,9 +58,7 @@ jobs:
           WRAP_DIR="maestro_flows"
           rm -f "$ZIP_NAME"
           rm -rf "$WRAP_DIR"
-
           mkdir -p "$WRAP_DIR"
-
           rsync -a --prune-empty-dirs \
             --include='*/' \
             --include='*.yaml' --include='*.yml' \
@@ -72,10 +70,8 @@ jobs:
             --exclude='LICENSE' --exclude='LICENCE' --exclude='README.md' \
             --exclude='*' \
             ./ "$WRAP_DIR/"
-
           echo "== Suite contents =="
           find "$WRAP_DIR" -type f | sed "s|^|  |" | sort
-
           zip -qr "$ZIP_NAME" "$WRAP_DIR"
           echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
@@ -98,13 +94,11 @@ jobs:
           set -euo pipefail
           RAW_ID="${{ github.repository }}-${{ github.ref_name }}-${{ github.run_id }}"
           CUSTOM_ID="$(echo "$RAW_ID" | tr '[:space:]' '_' | sed 's/[^A-Za-z0-9._-]/_/g')"
-
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/test-suite" \
             -F "file=@${{ steps.zip_suite.outputs.zip_path }}" \
             -F "custom_id=$CUSTOM_ID")
           echo "$RESP"
-
           SUITE_URL=$(echo "$RESP" | jq -r '.test_suite_url')
           SUITE_ID=$(echo "$RESP" | jq -r '.test_suite_id')
           test "$SUITE_URL" != "null"
@@ -127,29 +121,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           shopt -s nullglob nocaseglob
           ROOT_TESTS=( *.yml *.yaml )
           shopt -u nocaseglob
-
           echo "Selected tests:"
-          for f in "${ROOT_TESTS[@]}"; do
-            echo " - $f"
-          done
-
+          for f in "${ROOT_TESTS[@]}"; do echo " - $f"; done
           if ((${#ROOT_TESTS[@]} == 0)); then
             echo "No root-level tests (*.yml/*.yaml) found." >&2
             exit 1
           fi
-
           {
             echo 'tests<<EOF'
-            for f in "${ROOT_TESTS[@]}"; do
-              echo "$f"
-            done
+            for f in "${ROOT_TESTS[@]}"; do echo "$f"; done
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
-
           printf -v JSON '%s' "$(printf '"%s",' "${ROOT_TESTS[@]}" | sed 's/,$//')"
           echo "tests_json=[${JSON}]" >> "$GITHUB_OUTPUT"
 
@@ -173,29 +158,17 @@ jobs:
             --arg build   "$BUILDNAME" \
             --arg devices "$DEVICES" \
             --argjson tests "${TESTS_JSON:-[]}" \
-            '{
-               app: $app,
-               testSuite: $suite,
-               project: $project,
-               buildName: $build,
+            '{ app: $app, testSuite: $suite, project: $project, buildName: $build,
                devices: ($devices | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))),
-               tests: $tests
-             }')
-
-          echo "Request payload:"
-          echo "$PAYLOAD" | jq -C .
-
+               tests: $tests }')
+          echo "Request payload:"; echo "$PAYLOAD" | jq -C .
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -H "Content-Type: application/json" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
             -d "$PAYLOAD")
-
-          echo "Response:"
-          echo "$RESP" | jq -C .
-
+          echo "Response:"; echo "$RESP" | jq -C .
           BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
           test "$BUILD_ID" != "null" -a -n "$BUILD_ID"
-
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
           echo "BROWSERSTACK_BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
         shell: bash
@@ -218,9 +191,7 @@ jobs:
             STATUS=$(echo "$RESP" | jq -r '.status')
             echo "[$(date -u +%H:%M:%S)] Build $BUILD_ID status: $STATUS"
             echo "$RESP" > "artifacts/build-$BUILD_ID.json"
-            if [[ "$STATUS" =~ ^(passed|failed|error|stopped|timedout)$ ]]; then
-              break
-            fi
+            if [[ "$STATUS" =~ ^(passed|failed|error|stopped|timedout)$ ]]; then break; fi
             sleep $SLEEP
           done
           echo "status=$STATUS" >> "$GITHUB_OUTPUT"
@@ -239,14 +210,11 @@ jobs:
     needs: [maestro-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    outputs:
-      artifact_name: ${{ steps.set.outputs.artifact_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Generate Allure results
-        id: gen
         uses: ./.github/actions/generate-allure-files
         with:
           build_id: ${{ needs.maestro-e2e.outputs.build_id }}
@@ -255,11 +223,13 @@ jobs:
           username: ${{ secrets.BROWSERSTACK_USERNAME }}
           access_key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
 
-      # The composite action already uploaded the artifact with this name:
-      # "allure-results-${build_id}". Expose that name for downstream jobs.
-      - name: Set artifact name for downstream
-        id: set
-        run: echo "artifact_name=allure-results-${{ needs.maestro-e2e.outputs.build_id }}" >> "$GITHUB_OUTPUT"
+      - name: Upload zipped Allure results
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
+          path: ${{ steps.generate-allure-results.outputs.zip_path }}
+          if-no-files-found: error
+          retention-days: 14
 
   publish-allure-to-pages:
     if: ${{ inputs.generate_allure }}
@@ -272,13 +242,13 @@ jobs:
       - name: Download Allure results ZIP
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.generate-allure-results.outputs.artifact_name }}
+          name: allure-results-${{ needs.maestro-e2e.outputs.build_id }}
           path: .
 
       - name: Publish Allure HTML to Pages branch (non-overwrite)
         uses: ./.github/actions/publish-allure-to-pages
         with:
-          results_zip: ${{ needs.generate-allure-results.outputs.artifact_name }}.zip
+          results_zip: allure-results-${{ needs.maestro-e2e.outputs.build_id }}.zip
           build_id: ${{ needs.maestro-e2e.outputs.build_id }}
           pages_branch: allure-report
           base_path: reports

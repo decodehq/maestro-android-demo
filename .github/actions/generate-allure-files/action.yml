@@ -57,17 +57,14 @@ runs:
     - name: Generate Allure results
       shell: bash
       env:
-        # Allow either inputs or pre-set env vars
         BROWSERSTACK_USERNAME: ${{ inputs.username || env.BROWSERSTACK_USERNAME }}
         BROWSERSTACK_ACCESS_KEY: ${{ inputs.access_key || env.BROWSERSTACK_ACCESS_KEY }}
       run: |
         set -euo pipefail
-
         if [[ -z "${BROWSERSTACK_USERNAME:-}" || -z "${BROWSERSTACK_ACCESS_KEY:-}" ]]; then
-          echo "ERROR: BrowserStack credentials are not available. Provide inputs.username/access_key or set env vars." >&2
+          echo "ERROR: BrowserStack credentials are not available." >&2
           exit 2
         fi
-
         python "$GITHUB_ACTION_PATH/maestro_all_to_allure.py" \
           --build-id "${{ inputs.build_id }}" \
           --out-dir "${{ steps.prepare.outputs.results_dir }}" \
@@ -81,7 +78,6 @@ runs:
         OUT_DIR="${{ steps.prepare.outputs.results_dir }}"
         ZIP_NAME="allure-results-${{ inputs.build_id }}.zip"
         rm -f "$ZIP_NAME"
-        # zip contents of OUT_DIR into a single zip at repo root
         (cd "$OUT_DIR" && zip -qr "$GITHUB_WORKSPACE/$ZIP_NAME" .)
         echo "zip_path=$ZIP_NAME" >> "$GITHUB_OUTPUT"
 
