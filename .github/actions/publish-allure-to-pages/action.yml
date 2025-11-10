@@ -148,8 +148,6 @@ runs:
         REPORT_PATH="${DEST%/}/"
         ALLURE_URL="${BASE_URL}/${REPORT_PATH}index.html"
 
-        # Single annotation + job summary
-        echo "::notice title=Allure Report::${ALLURE_URL}"
         {
           echo "### Allure Report"
           echo ""
