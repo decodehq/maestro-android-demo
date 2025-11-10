@@ -165,32 +165,40 @@ jobs:
           DEVICES: ${{ env.BSTACK_DEVICES }}
           PROJECT: ${{ env.BSTACK_PROJECT }}
           BUILDNAME: ${{ env.BSTACK_BUILD_NAME }}
-          TESTS_JSON: ${{ steps.tests_whitelist.outputs.json }}
         run: |
           set -euo pipefail
-          IFS=',' read -r -a DEV_ARR <<< "$DEVICES"
-          DEV_JSON=$(printf '"%s",' "${DEV_ARR[@]}" | sed 's/,$//')
 
-          # Payload with explicit tests whitelist
+          # Build JSON: devices = comma-separated string -> array, with whitespace trimmed
           PAYLOAD=$(jq -n \
-            --arg app "$APP_URL" \
-            --arg suite "$SUITE_URL" \
+            --arg app     "$APP_URL" \
+            --arg suite   "$SUITE_URL" \
             --arg project "$PROJECT" \
-            --arg build "$BUILDNAME" \
-            --argjson devices "[$DEV_JSON]" \
-            --argjson tests "$TESTS_JSON" \
-            '{app: $app, testSuite: $suite, project: $project, buildName: $build, devices: $devices, tests: $tests }')
+            --arg build   "$BUILDNAME" \
+            --arg devices "$DEVICES" \
+            '{
+               app: $app,
+               testSuite: $suite,
+               project: $project,
+               buildName: $build,
+               devices: ($devices
+                          | split(",")
+                          | map(gsub("^\\s+|\\s+$"; ""))   # trim
+                          | map(select(length > 0)))       # drop empties
+             }')
 
-          echo "Request:"; echo "$PAYLOAD" | jq -C .
+          echo "Request payload:"
+          echo "$PAYLOAD" | jq -C .
 
           RESP=$(curl -sS -u "$BS_USER:$BS_KEY" \
             -H "Content-Type: application/json" \
             -X POST "https://api-cloud.browserstack.com/app-automate/maestro/v2/android/build" \
             -d "$PAYLOAD")
-          echo "Response:"; echo "$RESP" | jq -C .
+
+          echo "Response:"
+          echo "$RESP" | jq -C .
 
           BUILD_ID=$(echo "$RESP" | jq -r '.build_id')
-          test "$BUILD_ID" != "null"
+          test "$BUILD_ID" != "null" -a -n "$BUILD_ID"
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
         shell: bash
 
