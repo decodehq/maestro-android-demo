@@ -76,7 +76,7 @@ runs:
           git checkout "$BRANCH"
         else
           git checkout --orphan "$BRANCH"
-          rm -rf *
+          rm -rf ./*
         fi
 
         mkdir -p "$BASE"
@@ -84,23 +84,25 @@ runs:
         mkdir -p "$DEST"
         rsync -a --delete ./_work/allure-report/ "$DEST/"
 
-        tmpindex=$(mktemp)
+        tmpindex="$(mktemp)"
         cat > "$tmpindex" <<'HTML'
-        <!doctype html>
-        <meta charset="utf-8">
-        <title>__TITLE__</title>
-        <style>
-          body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.5;background:#0b0b0c;color:#e6e6e6}
-          a{color:#79c0ff;text-decoration:none}
-          h1{font-weight:600;margin:0 0 16px}
-          ul{list-style:none;padding:0}
-          li{margin:8px 0}
-          .path{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
-        </style>
-        <h1>__TITLE__</h1>
-        <ul>
-        HTML
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>__TITLE__</title>
+          <style>
+            body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:24px;line-height:1.5;background:#0b0b0c;color:#e6e6e6}
+            a{color:#79c0ff;text-decoration:none}
+            h1{font-weight:600;margin:0 0 16px}
+            ul{list-style:none;padding:0}
+            li{margin:8px 0}
+            .path{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
+          </style>
+          <h1>__TITLE__</h1>
+          <ul>
+          HTML
+
         if [ -d "$BASE" ]; then
+          # List newest first
           for d in $(ls -1 "$BASE"); do
             echo "$BASE/$d"
           done | sort -r | while read -r p; do
@@ -108,8 +110,10 @@ runs:
             echo "<li>🗂 <a class=\"path\" href=\"./$BASE/$rel/\">$rel</a></li>" >> "$tmpindex"
           done
         fi
+
         echo "</ul>" >> "$tmpindex"
-        sed -i.bak "s/__TITLE__/$TITLE/g" "$tmpindex"
+        # Replace title placeholder
+        sed -i.bak "s/__TITLE__/${TITLE//\//\\/}/g" "$tmpindex"
         mv "$tmpindex" index.html
 
         git add -A
