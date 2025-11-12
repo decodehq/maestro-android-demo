@@ -219,6 +219,10 @@ This demo workflow runs Maestro E2E tests across **BrowserStack** devices, conve
 | 🌐 **publish-allure-to-pages** | Builds and deploys Allure HTML report |
 | 🔔 **notify** | (Optional) Sends Slack summary with pass/fail stats |
 
+| Github | Allure |
+|--------|--------------|
+| <img width="1321" height="710" alt="Screenshot 2025-11-12 at 07 43 37" src="https://github.com/user-attachments/assets/a9d514e3-c530-4509-8b22-be4da8fccc83" /> | <img width="1345" height="817" alt="Screenshot 2025-11-12 at 07 45 40" src="https://github.com/user-attachments/assets/bf734454-05be-4d49-87e7-fb968de082c2" /> |
+
 
 📍Example run:  
 [Maestro E2E on BrowserStack #35](https://github.com/decodehq/maestro-android-demo/actions/runs/19246141804)
