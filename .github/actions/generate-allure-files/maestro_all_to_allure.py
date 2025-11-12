@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Create Allure 2 results (with proper nested steps) from BrowserStack Maestro logs.
+Create Allure 2 results (with proper nested steps) from Maestro logs.
+No external dependencies (urllib only).
 
 Two modes:
 1) Single log file (local path or URL):
    python maestro_all_to_allure.py \
-     --url "https://your.ci/artifacts/maestro.log" \
+     --url "file_or_https_url_to_maestro.log" \
      --out-dir ./allure-results \
      --suite "Wikipedia / Android" \
      --test "Search for article"
@@ -24,31 +25,58 @@ Then build the report:
 """
 
 import argparse
+import base64
 import json
 import os
 import re
-import string
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
+from urllib import request, error as urlerror
 
-try:
-    import requests
-except Exception:
-    requests = None
+# -------------------------------------------------------------------
+# HTTP helpers (stdlib only)
+# -------------------------------------------------------------------
+
+def _http_get(url: str, *, auth: Optional[tuple] = None, timeout: int = 60, expect_json: bool = False) -> str:
+    headers = {"User-Agent": "maestro-allure/1.1"}
+    if auth:
+        user, key = auth
+        token = base64.b64encode(f"{user}:{key}".encode("utf-8")).decode("ascii")
+        headers["Authorization"] = f"Basic {token}"
+
+    req = request.Request(url, headers=headers, method="GET")
+    try:
+        with request.urlopen(req, timeout=timeout) as resp:
+            ct = resp.headers.get("content-type", "")
+            data = resp.read()
+            text = data.decode("utf-8", errors="replace")
+            if expect_json and "application/json" not in ct:
+                raise RuntimeError(f"Expected JSON from {url}, got content-type={ct!r}")
+            return text
+    except urlerror.HTTPError as e:
+        if e.code == 401:
+            who = (auth[0] if auth and auth[0] else os.getenv("BROWSERSTACK_USERNAME") or "<missing>")
+            print(f"ERROR 401 from {url}. Username used: {who}", file=sys.stderr)
+        raise
+    except urlerror.URLError as e:
+        raise RuntimeError(f"Failed to GET {url}: {e}") from e
+
 
 # -------------------------------------------------------------------
 # Parsing
 # -------------------------------------------------------------------
 
+# Accept both BrowserStack and local loggers:
+#   maestro.cli.runner.TestSuiteInteractor.invoke: <name> RUNNING|COMPLETED|FAILED
+#   maestro.cli.runner.MaestroCommandRunner.runCommands$lambda$0: <name> RUNNING|COMPLETED|FAILED
 LINE_RE = re.compile(
-    r"""^(?P<time>\d{2}:\d{2}:\d{2}\.\d{3})\s+\[\s*\w+\]\s+maestro\.cli\.runner\.TestSuiteInteractor\.invoke:\s+(?P<name>.+?)\s+(?P<state>RUNNING|COMPLETED|FAILED)\s*$"""
+    r"""^(?P<time>\d{2}:\d{2}:\d{2}\.\d{3})\s+\[\s*\w+\]\s+(?:[\w$.]+\.)?(?:TestSuiteInteractor\.invoke|MaestroCommandRunner\.runCommands\$lambda\$\d+):\s+(?P<name>.+?)\s+(?P<state>RUNNING|COMPLETED|FAILED)\s*$"""
 )
 
 TIME_RE = re.compile(r"^(?P<h>\d{2}):(?P<m>\d{2}):(?P<s>\d{2})\.(?P<ms>\d{3})")
-
 
 def parse_hms_ms(tstr: str) -> Optional[int]:
     m = TIME_RE.match(tstr)
@@ -64,20 +92,7 @@ def parse_hms_ms(tstr: str) -> Optional[int]:
 def fetch_text(source: str, *, auth: Optional[tuple] = None, timeout: int = 60) -> str:
     """Read from URL or local path. Sends Basic Auth when provided."""
     if source.startswith(("http://", "https://")):
-        if requests is None:
-            print("ERROR: 'requests' is required to download via URL. Try: pip install requests", file=sys.stderr)
-            sys.exit(2)
-        r = requests.get(
-            source,
-            timeout=timeout,
-            auth=auth,  # fixes 401 for BrowserStack assets
-            headers={"User-Agent": "maestro-allure/1.1"},
-        )
-        if r.status_code == 401:
-            who = (auth[0] if auth and auth[0] else os.getenv("BROWSERSTACK_USERNAME") or "<missing>")
-            print(f"BrowserStack auth failed (401). Using username: {who}", file=sys.stderr)
-        r.raise_for_status()
-        return r.text
+        return _http_get(source, auth=auth, timeout=timeout, expect_json=False)
     return Path(source).read_text(encoding="utf-8", errors="replace")
 
 # -------------------------------------------------------------------
@@ -94,7 +109,6 @@ class StepNode:
         self.children: List["StepNode"] = []
 
     def to_allure(self, *, base_epoch_ms: int = 0, first_rel_ms: Optional[int] = None) -> dict:
-        """Convert to Allure step dict with epochized timestamps."""
         def shift(v: Optional[int]) -> int:
             if v is None:
                 return base_epoch_ms
@@ -183,20 +197,23 @@ def _parse_bs_time_to_epoch_ms(s: Optional[str]) -> Optional[int]:
 
 
 def result_from_tree(
+    *,
     roots: List[StepNode],
     first_ms: Optional[int],
     last_ms: Optional[int],
     suite_name: str,
     test_name: str,
-    raw_log_filename: str,
-    *,
+    attachment_source: str,  # unique filename that we already wrote to disk
     extra_labels: Optional[List[dict]] = None,
     parameters: Optional[List[dict]] = None,
-    links: Optional[List[dict]] = None,  # NEW: allow adding Allure links
-    # If known, pass true start time from BS (epoch ms) for better dating
+    links: Optional[List[dict]] = None,
     bs_test_start_epoch_ms: Optional[int] = None,
     history_discriminator: Optional[str] = None,
 ) -> dict:
+    """
+    Build the Allure result JSON. Caller is responsible for writing the attachment
+    file to disk and passing its *unique* filename as `attachment_source`.
+    """
     test_uuid = str(uuid.uuid4())
 
     def any_failed(nodes: List[StepNode]) -> bool:
@@ -209,7 +226,6 @@ def result_from_tree(
 
     status = "failed" if any_failed(roots) else "passed"
 
-    # Choose a base epoch so that step times are correct calendar dates.
     if bs_test_start_epoch_ms is not None and first_ms is not None:
         base_epoch_ms = bs_test_start_epoch_ms - first_ms
     else:
@@ -217,7 +233,6 @@ def result_from_tree(
         duration = (last_ms or 0) - (first_ms or 0) if (first_ms is not None and last_ms is not None) else 0
         base_epoch_ms = now_ms - max(0, duration)
 
-    # Compute epochized test start/stop
     start_ms = (base_epoch_ms + first_ms) if first_ms is not None else int(datetime.now(tz=timezone.utc).timestamp() * 1000)
     stop_ms = (base_epoch_ms + last_ms) if (last_ms is not None and first_ms is not None) else start_ms
 
@@ -231,7 +246,6 @@ def result_from_tree(
 
     params = parameters or []
 
-    # Make each matrix item its own history, so Allure won't collapse as "Retries".
     hist_seed = f"{suite_name}:{test_name}"
     if history_discriminator:
         hist_seed += f":{history_discriminator}"
@@ -248,7 +262,8 @@ def result_from_tree(
         "stop": stop_ms,
         "steps": [n.to_allure(base_epoch_ms=base_epoch_ms, first_rel_ms=first_ms) for n in roots],
         "attachments": [
-            {"name": "_raw_maestro_log", "type": "text/plain", "source": raw_log_filename}
+            # Display name stays constant; *source* is unique per test
+            {"name": "_raw_maestro_log", "type": "text/plain", "source": attachment_source}
         ],
         "labels": labels,
         "parameters": params,
@@ -258,29 +273,17 @@ def result_from_tree(
     return result
 
 # -------------------------------------------------------------------
-# BrowserStack Maestro API helpers (v2, api-cloud host)
+# BrowserStack Maestro API helpers (v2, api-cloud host) — stdlib only
 # -------------------------------------------------------------------
 
 BS_API_BASE = "https://api-cloud.browserstack.com/app-automate/maestro/v2"
 
-
 def bs_get_json(url_or_path: str, *, auth: tuple) -> dict:
-    """GET JSON from a full URL or BS v2 path."""
-    if url_or_path.startswith("http"):
-        url = url_or_path
-    else:
-        url = f"{BS_API_BASE}/{url_or_path.lstrip('/')}"
-    r = requests.get(url, auth=auth, headers={"User-Agent": "maestro-allure/1.1"})
-    if r.status_code == 401:
-        print("ERROR: BrowserStack returned 401 for API call. Check username/access key.", file=sys.stderr)
-    r.raise_for_status()
-    ct = r.headers.get("content-type", "")
-    if "application/json" not in ct:
-        raise RuntimeError(f"Expected JSON from {url}, got content-type={ct!r}")
-    return r.json()
+    url = url_or_path if url_or_path.startswith("http") else f"{BS_API_BASE}/{url_or_path.lstrip('/')}"
+    text = _http_get(url, auth=auth, expect_json=True)
+    return json.loads(text)
 
-
-def iter_tests_for_build(build_id: string, *, auth: tuple):
+def iter_tests_for_build(build_id: str, *, auth: tuple):
     """
     Yield test dictionaries with at least:
       id, name, device, os, os_version, session_id, maestro_log_url, bs_test_start_epoch_ms
@@ -331,7 +334,7 @@ def iter_tests_for_build(build_id: string, *, auth: tuple):
 # -------------------------------------------------------------------
 
 def main():
-    ap = argparse.ArgumentParser(description="Convert Maestro raw log(s) to Allure results.")
+    ap = argparse.ArgumentParser(description="Convert Maestro raw log(s) to Allure results (no external deps).")
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--url", help="HTTP(s) URL OR local path to a single Maestro log (text).")
     mode.add_argument("--build-id", help="BrowserStack Maestro Build ID to convert all tests from.")
@@ -345,10 +348,6 @@ def main():
 
     args = ap.parse_args()
 
-    if requests is None:
-        print("ERROR: 'requests' is required. Try: pip install requests", file=sys.stderr)
-        sys.exit(2)
-
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -361,10 +360,12 @@ def main():
     if args.url:
         # Single-log mode
         log_text = fetch_text(args.url, auth=auth)
-        raw_name = "_raw_maestro_log.txt"
-        (out_dir / raw_name).write_text(log_text, encoding="utf-8")
 
         roots, first_ms, last_ms = build_step_tree(log_text)
+
+        # Write a UNIQUE attachment file and reference it by that name
+        attachment_source = f"{uuid.uuid4()}-raw_maestro_log.txt"
+        (out_dir / attachment_source).write_text(log_text, encoding="utf-8")
 
         result = result_from_tree(
             roots=roots,
@@ -372,12 +373,13 @@ def main():
             last_ms=last_ms,
             suite_name=args.suite,
             test_name=args.test,
-            raw_log_filename=raw_name,
-            parameters=[],  # none in single-log mode
+            attachment_source=attachment_source,
+            parameters=[],
             history_discriminator=None,
         )
-        result_path = out_dir / f"{uuid.uuid4()}-result.json"
-        result_path.write_text(json.dumps(result, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        (out_dir / f"{uuid.uuid4()}-result.json").write_text(
+            json.dumps(result, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
 
         container = {
             "uuid": str(uuid.uuid4()),
@@ -387,7 +389,9 @@ def main():
             "afters": [],
             "links": [],
         }
-        (out_dir / f"{uuid.uuid4()}-container.json").write_text(json.dumps(container, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        (out_dir / f"{uuid.uuid4()}-container.json").write_text(
+            json.dumps(container, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+        )
 
         def flatten(nodes: List[StepNode]) -> List[StepNode]:
             out = []
@@ -409,34 +413,30 @@ def main():
             print("ERROR: --build-id requires BrowserStack credentials. Use --username/--access-key or set BROWSERSTACK_USERNAME/BROWSERSTACK_ACCESS_KEY.", file=sys.stderr)
             sys.exit(2)
 
-        # Iterate all BS tests in the build (v2 API)
         children = []
         for t in iter_tests_for_build(args.build_id, auth=auth):
             total_tests += 1
             test_name = t["name"]
-            raw_name = f"_raw_{t['id']}_maestro_log.txt"
 
-            # Download the plain-text Maestro log for this test (requires auth)
             log_text = fetch_text(t["maestro_log_url"], auth=auth)
-            (out_dir / raw_name).write_text(log_text, encoding="utf-8")
+
+            # Unique attachment per test
+            attachment_source = f"{uuid.uuid4()}-raw_maestro_log.txt"
+            (out_dir / attachment_source).write_text(log_text, encoding="utf-8")
 
             roots, first_ms, last_ms = build_step_tree(log_text)
 
-            # Labels (IDs removed)
             labels = [
                 {"name": "host", "value": (t.get("device") or "unknown")},
                 {"name": "thread", "value": (t.get("os") or "unknown")},
             ]
 
-            # Parameters: device + os_version first; no bs_* here
             parameters = [
                 {"name": "device", "value": t.get("device") or "unknown"},
                 {"name": "os_version", "value": t.get("os_version") or "unknown"},
                 {"name": "os", "value": t.get("os") or "unknown"},
             ]
 
-            # Allure links for quick navigation to BS dashboard
-            # (common App Automate pattern)
             build_url = f"https://app-automate.browserstack.com/dashboard/v2/builds/{t.get('build_id')}"
             session_url = f"{build_url}/sessions/{t.get('session_id')}"
             links = [
@@ -451,7 +451,7 @@ def main():
                 last_ms=last_ms,
                 suite_name=args.suite,
                 test_name=test_name,
-                raw_log_filename=raw_name,
+                attachment_source=attachment_source,
                 extra_labels=labels,
                 parameters=parameters,
                 links=links,
@@ -459,12 +459,10 @@ def main():
                 history_discriminator=hist_disc,
             )
             (out_dir / f"{uuid.uuid4()}-result.json").write_text(
-                json.dumps(result, ensure_ascii=False, separators=(",", ":")),
-                encoding="utf-8",
+                json.dumps(result, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
             )
             children.append(result["uuid"])
 
-        # One container for the suite
         container = {
             "uuid": str(uuid.uuid4()),
             "name": args.suite,
@@ -474,8 +472,7 @@ def main():
             "links": [],
         }
         (out_dir / f"{uuid.uuid4()}-container.json").write_text(
-            json.dumps(container, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
+            json.dumps(container, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
         )
 
         print(f"Wrote Allure results to: {out_dir}")
