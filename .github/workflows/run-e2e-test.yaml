@@ -22,9 +22,18 @@ on:
         type: boolean
         required: false
         default: true
+      chosen-os:
+        required: true
+        type: choice
+        options:
+        - Ubuntu
+        - macOS
+        - third
+
 
 env:
-  BSTACK_DEVICES: "Google Pixel 7-13.0, Google Pixel 8-14.0, Google Pixel 6 Pro-12.0, Samsung Galaxy S22-12.0, OnePlus 11R-13.0"
+  # BSTACK_DEVICES: "Google Pixel 7-13.0, Google Pixel 8-14.0, Google Pixel 6 Pro-12.0, Samsung Galaxy S22-12.0, OnePlus 11R-13.0"
+  BSTACK_DEVICES: "Google Pixel 7-13.0"
   BSTACK_PROJECT: "Maestro E2E"
   BSTACK_BUILD_NAME: "E2E Run - ${{ github.ref_name }} @ ${{ github.run_number }}"
 
@@ -67,6 +76,7 @@ jobs:
             --include='*.mp4' \
             --exclude='.github/***' \
             --exclude='.maestro/***' \
+            --exclude='artifacts/***' \
             --exclude='LICENSE' --exclude='LICENCE' --exclude='README.md' \
             --exclude='*' \
             ./ "$WRAP_DIR/"
